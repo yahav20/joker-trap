@@ -147,6 +147,7 @@ ws.on("message", async (raw) => {
     // ── Sender: Receiver rejected, offer another ──────────────────────────────
     case "second_offer_needed":
     case "third_offer_needed": {
+      if (payload.yourHand) myHand = payload.yourHand; // ← sync hand FIRST
       if (isPrompting) break;
       sep();
       console.log(`⚠️  ${payload.message}`);

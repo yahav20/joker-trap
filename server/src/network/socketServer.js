@@ -6,6 +6,7 @@
 
 const WebSocket = require("ws");
 const GameState = require("../game/GameState");
+const BotAdapter = require("../ai/BotAdapter");
 const logger = require("../utils/logger");
 const { PORT, PLAYER_COUNT } = require("../config/constant");
 
@@ -15,11 +16,15 @@ let game = null;
 
 /**
  * Creates and starts the WebSocket server.
+ *
  * @param {number} [port=PORT]
+ * @param {number} [botCount=0]  How many bot players to auto-fill.
+ *   Set to (PLAYER_COUNT - 1) to allow a single human to play against all bots.
+ *   Bots are always assigned the highest player IDs.
  */
-function startServer(port = PORT) {
+function startServer(port = PORT, botCount = 0) {
     wss = new WebSocket.Server({ port });
-    logger.info(`Joker Trap WebSocket Server running on ws://localhost:${port}`);
+    logger.info(`Joker Trap WebSocket Server running on ws://localhost:${port} (bots: ${botCount})`);
 
     wss.on("connection", (ws) => {
         // Reject if game in progress or room full
@@ -31,24 +36,46 @@ function startServer(port = PORT) {
             ws.close();
             return;
         }
-        
+
         connectedClients.push(ws);
         const playerIndex = connectedClients.length - 1;
         logger.info(`Player ${playerIndex} connected (${connectedClients.length}/${PLAYER_COUNT})`);
         ws.playerId = playerIndex;
 
+        // Update the waiting message with remaining human slots needed
+        const humanSlotsNeeded = PLAYER_COUNT - botCount - connectedClients.length;
         ws.send(JSON.stringify({
             event: "waiting",
             payload: {
-                message: `You are Player ${playerIndex}. Waiting for ${PLAYER_COUNT - connectedClients.length} more player(s)...`,
+                message: `You are Player ${playerIndex}. Waiting for ${Math.max(0, humanSlotsNeeded)} more human player(s)...`,
             },
         }));
 
-        // Start when room is full
-        if (connectedClients.length === PLAYER_COUNT) {
-            logger.info("All players connected – starting game!");
-            game = new GameState(_buildAdapters([...connectedClients]));
-            game.start("Game started! Player 1 requests a card from Player 0 first.");
+        // Start when enough humans have connected to fill the non-bot slots
+        const humanSlotsRequired = PLAYER_COUNT - botCount;
+        if (connectedClients.length === humanSlotsRequired) {
+            logger.info(`All human players connected (${connectedClients.length}/${humanSlotsRequired}) – adding ${botCount} bot(s) and starting game!`);
+
+            // Build human adapters first (IDs 0…humanCount-1)
+            const adapters = _buildAdapters([...connectedClients]);
+
+            // Build bot adapters (IDs humanCount…PLAYER_COUNT-1)
+            const bots = [];
+            for (let b = 0; b < botCount; b++) {
+                const botId = connectedClients.length + b;
+                const bot = new BotAdapter(botId);
+                adapters.push(bot);
+                bots.push(bot);
+            }
+
+            game = new GameState(adapters);
+
+            // Give each bot a reference to the game so it can call back
+            for (const bot of bots) {
+                bot.attachGame(game);
+            }
+
+            game.start("Game started!");
         }
 
         ws.on("message", (raw) => {
