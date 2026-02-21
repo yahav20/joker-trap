@@ -1,0 +1,25 @@
+{
+  "name": "jokertrap",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --verbose",
+    "start": "node server/src/index.js"
+  },
+  "jest": {
+    "testMatch": [
+      "**/server/tests/**/*.test.js"
+    ],
+    "testEnvironment": "node"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
+  }
+}
