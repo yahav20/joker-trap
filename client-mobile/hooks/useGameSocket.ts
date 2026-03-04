@@ -47,9 +47,11 @@ export const useGameSocket = () => {
 
     const ws = useRef<WebSocket | null>(null);
 
-    useEffect(() => {
-        // 1. Establish standard connection to local server
-        const HOST = process.env.EXPO_PUBLIC_WS_URL || 'ws://10.100.102.1:8080'; // fallback to IP or localhost
+    const connect = useCallback(() => {
+        const HOST = process.env.EXPO_PUBLIC_WS_URL || 'ws://10.100.102.1:8080';
+        console.log('Connecting to:', HOST);
+        setGameMessage('Connecting to server...');
+
         ws.current = new WebSocket(HOST);
 
         ws.current.onopen = () => {
@@ -187,15 +189,24 @@ export const useGameSocket = () => {
             }
         };
 
-        ws.current.onclose = () => {
+        ws.current.onclose = (e) => {
             setConnected(false);
-            setGameMessage('Disconnected. Reconnecting...');
+            setGameMessage('Disconnected from server.');
+            console.log('WS Closed:', e.code, e.reason);
         };
 
+        ws.current.onerror = (e) => {
+            console.error('WS Error:', e);
+            setGameMessage('Connection error.');
+        };
+    }, []);
+
+    useEffect(() => {
+        connect();
         return () => {
             ws.current?.close();
         };
-    }, []);
+    }, [connect]);
 
     const sendAction = useCallback((action: string, data: any) => {
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -205,5 +216,9 @@ export const useGameSocket = () => {
         }
     }, []);
 
-    return { myHand, tableCards, gameMessage, toastMessage, gameOverPayload, currentTurn, opponents, myPlayerId, sendAction, connected };
+    return {
+        myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
+        currentTurn, opponents, myPlayerId, sendAction, connected,
+        reconnect: connect
+    };
 };
