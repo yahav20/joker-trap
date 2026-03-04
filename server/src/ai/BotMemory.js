@@ -46,6 +46,15 @@ class BotMemory {
          */
         this.confirmedJokerHolder = null;
 
+        /**
+         * Tracks which players likely hold which ranks.
+         * @type {Map<number, Set<string>>}
+         */
+        this.knownRanks = new Map();
+        for (let i = 0; i < playerCount; i++) {
+            this.knownRanks.set(i, new Set());
+        }
+
         /** Round counter — incremented each time the bot observes a turn advance. */
         this.round = 0;
     }
@@ -65,6 +74,9 @@ class BotMemory {
     recordRequest(receiverId, rank) {
         this.eventLog.push({ type: "request", receiverId, rank, round: this.round });
         this.rankRequests.set(rank, (this.rankRequests.get(rank) ?? 0) + 1);
+
+        // If a player requests a rank, they LIKELY don't have it (but we track the intent)
+        // However, if we see someone REQUESTING a card, we know they are interest in it.
 
         // Players actively requesting are likely chasing a quad → slightly lower suspicion.
         this._adjustSuspicion(receiverId, -0.03);
@@ -126,6 +138,12 @@ class BotMemory {
             for (const [id] of this.jokerSuspicion) {
                 this.jokerSuspicion.set(id, id === receiverId ? 1 : 0);
             }
+        } else {
+            // Track known ranks
+            if (!this.knownRanks.has(receiverId)) {
+                this.knownRanks.set(receiverId, new Set());
+            }
+            this.knownRanks.get(receiverId).add(card.rank);
         }
     }
 

@@ -72,6 +72,9 @@ class GameState {
 
         logger.game(`Player ${playerId} requested rank: ${normalised}`);
 
+        // Broadcast to everyone that the phase changed to WAITING_FOR_FIRST_OFFER
+        this._broadcastGameState();
+
         // Only the SENDER sees what was requested
         this._sender().send("card_requested", {
             requestedRank: normalised,
@@ -138,7 +141,10 @@ class GameState {
             return; // early return; _resolveTransfer handles sender update
         }
 
-        // Update sender's hand view after placing card
+        // Broadcast state so everyone sees the card on the table
+        this._broadcastGameState();
+
+        // Update sender's hand view after placing card (legacy explicit)
         sender.send("card_placed_on_table", {
             yourHand: sender.hand,
             tableCount: ts.tableCards.length,
@@ -174,6 +180,7 @@ class GameState {
                 this._resolveTransfer(0);
             } else if (decision === "reject") {
                 ts.phase = PHASES.WAITING_FOR_SECOND_OFFER;
+                this._broadcastGameState();
                 this._sender().send("second_offer_needed", {
                     message: "Receiver rejected your first card! Offer a second one.",
                     yourHand: this._sender().hand,
@@ -188,6 +195,7 @@ class GameState {
                 this._resolveTransfer(1);
             } else if (decision === "force_third") {
                 ts.phase = PHASES.WAITING_FOR_THIRD_OFFER;
+                this._broadcastGameState();
                 this._sender().send("third_offer_needed", {
                     message: "Receiver forced a third card! You MUST offer another card.",
                     yourHand: this._sender().hand,
@@ -305,6 +313,7 @@ class GameState {
                     phase: ts.phase,
                     requestedRank: p.id === ts.senderIndex ? ts.requestedRank : undefined,
                 },
+                tableCount: ts.tableCards.length,
                 ...extras,
             });
         }
