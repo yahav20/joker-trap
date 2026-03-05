@@ -6,6 +6,11 @@ import {
 import { useRouter } from 'expo-router';
 import { BACKGROUND } from '../constants/Cards';
 
+/**
+ * Static game rules content displayed in the in-app rules modal.
+ * Each entry has a short `title` and a longer `text` block.
+ * New rule sections can be appended here without touching the JSX.
+ */
 const RULES = [
     {
         title: "Overview",
@@ -33,8 +38,19 @@ const RULES = [
     },
 ];
 
+/**
+ * Home screen — the app's landing page.
+ *
+ * Provides two interactions:
+ *  1. **Play** button: navigates to `/game` where the WebSocket connection is opened.
+ *  2. **Game Rules** button: toggles the local `rulesVisible` state to show an in-app
+ *     modal with the RULES content.
+ *
+ * This screen does NOT open a WebSocket; that happens in `app/game.tsx`.
+ */
 export default function HomeScreen() {
     const router = useRouter();
+    /** Controls whether the scrollable rules modal is visible. */
     const [rulesVisible, setRulesVisible] = useState(false);
 
     return (

@@ -2,19 +2,31 @@ import React from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, SafeAreaView } from 'react-native';
 import { styles as gameStyles } from '../../styles/gameStyles';
 
+/**
+ * Props for the Lobby component.
+ */
 interface LobbyProps {
+    /** Whether the WebSocket is currently connected to the server. */
     connected: boolean;
+    /** Latest server message (e.g. "Waiting for 2 more players..."). */
     gameMessage: string;
 }
 
 /**
- * Lobby screen shown before the game starts
+ * Pre-game Lobby screen displayed while waiting for all 4 players to connect.
+ *
+ * Shows a spinner while the socket is still connecting, and switches to a
+ * "Waiting for players" message once the connection is established.
+ * The raw `gameMessage` from the server is shown beneath as a sub-text.
+ *
+ * Rendered by `game.tsx` when `currentTurn.phase === 'lobby'`.
  */
 export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage }) => {
     return (
         <SafeAreaView style={styles.lobbyContainer}>
             <View style={styles.lobbyBox}>
                 <Text style={styles.lobbyTitle}>Joker Trap</Text>
+                {/* Show an animated spinner while the socket handshake is in progress. */}
                 {!connected && (
                     <ActivityIndicator size="large" color="#ffffff" style={styles.loader} />
                 )}

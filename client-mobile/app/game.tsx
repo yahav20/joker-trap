@@ -6,7 +6,7 @@ import { useGameSocket } from '../hooks/useGameSocket';
 import { BACKGROUND } from '../constants/Cards';
 import { styles as gameStyles } from '../styles/gameStyles';
 
-// Modular Components
+// Components
 import { Card } from '../components/joker-trap/Card';
 import { PlayerZone } from '../components/joker-trap/PlayerZone';
 import { TableArea } from '../components/joker-trap/TableArea';
@@ -15,10 +15,26 @@ import { DisconnectedOverlay } from '../components/joker-trap/DisconnectedOverla
 import { RequestModal } from '../components/joker-trap/RequestModal';
 import { Lobby } from '../components/joker-trap/Lobby';
 
+/**
+ * Enable smooth layout animations on Android.
+ * On iOS this is on by default; Android requires an explicit opt-in.
+ * Must be called before any component renders.
+ */
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+/**
+ * Main game screen — the primary entry point once a match is in progress.
+ *
+ * Responsibilities:
+ *  - Connects to the WebSocket server via `useGameSocket` and re-exposes all state.
+ *  - Maps the 4-player seat IDs to physical UI zones (top / left / right / bottom).
+ *  - Delegates action sending to the hook's `sendAction` helper.
+ *  - Renders the Lobby while waiting for players, or the full board once a game starts.
+ *  - Always renders GameOverModal, RequestModal, and DisconnectedOverlay (each
+ *    controls its own visibility internally).
+ */
 export default function App() {
     const router = useRouter();
     const {
@@ -26,31 +42,55 @@ export default function App() {
         currentTurn, opponents, myPlayerId, sendAction, connected, reconnect
     } = useGameSocket();
 
-    // Map opponents to specific UI zones
+    /**
+     * Map player seat IDs to the three opponent UI positions.
+     * In a 4-player game the seats are numbered 0–3 clockwise starting from "me":
+     *   +1 → left opponent
+     *   +2 → top opponent (directly opposite)
+     *   +3 → right opponent
+     * All arithmetic is mod 4 to wrap around the table.
+     */
     const leftOppId = myPlayerId !== null ? (myPlayerId + 1) % 4 : null;
     const topOppId = myPlayerId !== null ? (myPlayerId + 2) % 4 : null;
     const rightOppId = myPlayerId !== null ? (myPlayerId + 3) % 4 : null;
 
+    // Resolve opponent objects from the opponents array, defaulting to 4 cards if not yet known.
     const leftObj = opponents.find(o => o.id === leftOppId);
     const topObj = opponents.find(o => o.id === topOppId);
     const rightObj = opponents.find(o => o.id === rightOppId);
 
+    // Build face-down hand arrays for each opponent zone.
     const leftHand = Array(leftObj ? leftObj.handCount : 4).fill(null);
     const topHand = Array(topObj ? topObj.handCount : 4).fill(null);
     const rightHand = Array(rightObj ? rightObj.handCount : 4).fill(null);
 
-    // Smooth UI animations
+    /**
+     * Animate layout changes (hand size, table size, phase) with a smooth ease-in-out.
+     * Triggers whenever any of the tracked values change.
+     */
     React.useEffect(() => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }, [myHand.length, tableCards.length, currentTurn.phase, currentTurn.sender]);
 
-    // Action Handlers
+    // ── Action Handlers ──────────────────────────────────────────────────────
+
+    /**
+     * Called when the local player taps one of their own cards.
+     * Only active during offer phases when this player is the sender.
+     * Sends the chosen card index to the server.
+     */
     const handleCardOffer = (index: number) => {
         if (currentTurn?.phase?.includes('offer') && currentTurn.sender === myPlayerId) {
             sendAction('offer_card', { cardIndex: index });
         }
     };
 
+    /**
+     * Called when the receiver taps a face-down card on the table.
+     * The mapping of table card index → decision type:
+     *  - First decision, index 0 → 'accept' (take the only card on the table)
+     *  - Second decision, index 0/1 → accept the first or second offer respectively
+     */
     const handleTableChoice = (index: number) => {
         const isDeciding = (currentTurn.phase === 'waiting_for_first_decision' || currentTurn.phase === 'waiting_for_second_decision') && currentTurn.receiver === myPlayerId;
         if (!isDeciding) return;
@@ -63,11 +103,18 @@ export default function App() {
         }
     };
 
+    /**
+     * Generic decision sender — used by the inline "Ask Another" and "Force 3rd" buttons
+     * in TableArea. The `decision` string is passed directly to the server.
+     */
     const handleDecisionAction = (decision: string) => {
         sendAction('make_decision', { decision });
     };
 
-    // Render Lobby if game hasn't started
+    // ── Lobby gate ───────────────────────────────────────────────────────────
+
+    // Show the lobby screen while the game has not started yet.
+    // Once a game_over payload arrives we render the board + GameOverModal instead.
     if (currentTurn?.phase === 'lobby' && !gameOverPayload) {
         return (
             <ImageBackground source={BACKGROUND} style={localStyles.background}>
@@ -76,6 +123,11 @@ export default function App() {
         );
     }
 
+    /**
+     * Derived booleans that drive conditional rendering.
+     * Both require the local player to be the receiver AND the phase to match
+     * so that the UI only changes for the correct player.
+     */
     const isDecisionPhase = (currentTurn.phase === 'waiting_for_first_decision' || currentTurn.phase === 'waiting_for_second_decision') && currentTurn.receiver === myPlayerId;
     const isRequestingPhase = currentTurn.phase === 'waiting_for_request' && currentTurn.receiver === myPlayerId;
 

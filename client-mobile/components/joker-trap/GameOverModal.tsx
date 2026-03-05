@@ -4,15 +4,39 @@ import { useRouter } from 'expo-router';
 import { Card } from './Card';
 import { theme } from '../../styles/gameStyles';
 
+/**
+ * Props for the GameOverModal component.
+ */
 interface GameOverModalProps {
+    /**
+     * The game-over payload received from the server.
+     * When `null`, the modal renders nothing (hidden state).
+     */
     payload: any;
+    /** The local player's seat ID — used to personalise win/loss messaging. */
     myPlayerId: number | null;
+    /** Called when the player taps "Restart" — should send a `restart_game` action. */
     onRestart: () => void;
 }
 
+/**
+ * Full-screen modal displayed at the end of every round.
+ *
+ * Shows:
+ *  1. A win/loss headline personalised to the local player.
+ *  2. A summary line identifying the player who completed the Quad.
+ *  3. The Joker line identifying who was stuck with the Joker (the loser).
+ *  4. A scrollable grid of every player's final hand with winner/loser highlights.
+ *  5. Action buttons to navigate Home or trigger a restart.
+ *
+ * The modal is rendered unconditionally by `game.tsx`; it returns null internally
+ * when `payload` is null so there is no extra wrapper logic needed in the parent.
+ */
 export const GameOverModal: React.FC<GameOverModalProps> = ({ payload, myPlayerId, onRestart }) => {
+    // Nothing to show until the server sends a game_over event.
     if (!payload) return null;
     const router = useRouter();
+    // Determine the local player's outcome to choose the correct headline.
     const isMyLoss = payload.loserId === myPlayerId;
 
     return (
@@ -76,10 +100,10 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ payload, myPlayerI
                 {/* ── Action Row: Home ←  → Restart ── */}
                 <View style={styles.actionRow}>
                     <TouchableOpacity style={[styles.btn, styles.homeBtn]} onPress={() => router.replace('/')}>
-                        <Text style={styles.btnText}>🏠  Home</Text>
+                        <Text style={styles.btnText}>🏠</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.btn, styles.restartBtn]} onPress={onRestart}>
-                        <Text style={styles.btnText}>↺  Restart</Text>
+                        <Text style={styles.btnText}>↺</Text>
                     </TouchableOpacity>
                 </View>
 

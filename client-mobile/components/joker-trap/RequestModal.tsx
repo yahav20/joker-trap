@@ -1,16 +1,31 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 
+/**
+ * Props for the RequestModal component.
+ */
 interface RequestModalProps {
+    /** Controls whether the modal is shown. When false the component returns null. */
     visible: boolean;
+    /** The ID of the opponent the receiver will be asking a card from. */
     senderId: number | null;
+    /** Callback fired when the player selects a rank to request. Passes the rank string (e.g. 'K'). */
     onSelectRank: (rank: string) => void;
 }
 
 /**
- * Rank selection modal — centered, round buttons, subtitle below
+ * Rank-selection modal shown to the receiver during the `waiting_for_request` phase.
+ *
+ * Presents four circular rank buttons (J, Q, K, A) — one tap sends the
+ * `request_card` action to the server via the `onSelectRank` callback.
+ *
+ * The Joker is intentionally excluded from the selection: players cannot ask
+ * for the Joker directly; they may only receive it as part of an offer.
+ *
+ * Controlled externally by `game.tsx` via `isRequestingPhase`.
  */
 export const RequestModal: React.FC<RequestModalProps> = ({ visible, senderId, onSelectRank }) => {
+    // When this player is not the receiver, render nothing.
     if (!visible) return null;
 
     return (

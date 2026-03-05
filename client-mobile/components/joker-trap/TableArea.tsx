@@ -3,19 +3,39 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Card } from './Card';
 import { styles as gameStyles, theme } from '../../styles/gameStyles';
 
+/**
+ * Props for the TableArea component.
+ */
 interface TableAreaProps {
+    /** Array of face-down table cards. Each element is `null`; we only track quantity. */
     tableCards: any[];
+    /** Global status message string displayed to all players. */
     gameMessage: string;
+    /** Active turn object from `useGameSocket` (phase, sender, receiver). */
     currentTurn: any;
+    /** True if the local player is the receiver and must choose accept/reject. */
     isDecisionPhase: boolean;
+    /** Hides decision buttons while the game-over modal is active. */
     gameOver: boolean;
+    /** Called when the player taps a face-down table card (implicitly accepts it). */
     onTableCardPress: (index: number) => void;
+    /** Called when the player taps an inline decision button ('reject'|'force_third'). */
     onDecision: (decision: string) => void;
 }
 
 /**
- * Center of the game board
- * Displays table cards, global messages, and inline decision buttons
+ * The central game board area.
+ *
+ * Renders three layers of content:
+ *  1. **Table cards** — face-down cards placed by the sender, displayed in a row.
+ *     Tapping a card triggers `onTableCardPress(index)` which the parent maps to an
+ *     accept decision.
+ *  2. **Inline decision buttons** — shown only to the receiver during decision phases:
+ *       - `waiting_for_first_decision`: an "Ask Another" button (reject offer 1).
+ *       - `waiting_for_second_decision`: a "Force 3rd" button (force the sender's 3rd card).
+ *  3. **Message box** — an always-visible status area with the latest `gameMessage`
+ *     and turn info (sender/receiver IDs). Rendered with `pointerEvents="none"`
+ *     so it never blocks taps on the cards beneath it.
  */
 export const TableArea: React.FC<TableAreaProps> = ({
     tableCards,

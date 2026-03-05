@@ -4,19 +4,47 @@ import { Card } from './Card';
 import { CardData } from '../../constants/Cards';
 import { styles as gameStyles } from '../../styles/gameStyles';
 
+/**
+ * Props for the PlayerZone component.
+ */
 interface PlayerZoneProps {
+    /** Seat ID of the player this zone belongs to. `null` while the game hasn't assigned IDs. */
     playerId: number | null;
+    /**
+     * The player's hand to render.
+     * Each element is a `CardData` value; opponents always receive `null` (face-down) cards.
+     */
     hand: CardData[];
+    /** @internal Kept for API compatibility; currently all non-self players are rendered as opponents. */
     isOpponent?: boolean;
+    /**
+     * CSS `rotate()` value applied to every card image in horizontal mode.
+     * Use `'180deg'` for the top opponent to flip their cards upside-down.
+     */
     rotation?: string;
+    /** When true, renders the zone with a blue highlight (this player is the active sender). */
     isActive?: boolean;
+    /** When true, renders the zone with an orange highlight (this player is the active receiver). */
     isReceiver?: boolean;
-    /** If true, cards are stacked in a column (portrait, no rotation) for side players */
+    /**
+     * When true, cards are stacked vertically (column) — used for side opponents (left/right).
+     * When false (default), cards are laid out in a horizontal row with optional rotation.
+     */
     vertical?: boolean;
 }
 
 /**
- * Renders a player's hand and label inside a themed container
+ * Renders a player's hand inside a themed container.
+ *
+ * Layout modes:
+ *  - **Horizontal** (default, `vertical={false}`): cards are placed side-by-side with
+ *    optional CSS rotation (e.g. 180° for the top opponent). Used for top opponent.
+ *  - **Vertical** (`vertical={true}`): cards are stacked top-to-bottom with the player
+ *    label floating as an absolute overlay above the first card. Used for left/right opponents.
+ *
+ * Highlight colours:
+ *  - Blue border → this player is the current sender (offering cards).
+ *  - Orange border → this player is the current receiver (choosing a card).
  */
 export const PlayerZone: React.FC<PlayerZoneProps> = ({
     playerId,
@@ -27,12 +55,14 @@ export const PlayerZone: React.FC<PlayerZoneProps> = ({
     isReceiver,
     vertical = false,
 }) => {
+    // Determine the highlight border/background based on turn role.
     const highlightStyle = isActive
         ? { borderColor: '#4da6ff', borderWidth: 2, borderRadius: 10, backgroundColor: 'rgba(77,166,255,0.2)' }
         : isReceiver
             ? { borderColor: '#ff6b4a', borderWidth: 2, borderRadius: 10, backgroundColor: 'rgba(255,107,74,0.2)' }
             : {};
 
+    // Opponents' cards are rendered slightly smaller than the local player's cards.
     const cardW = isOpponent ? 45 : 60;
     const cardH = isOpponent ? 68 : 90;
 
