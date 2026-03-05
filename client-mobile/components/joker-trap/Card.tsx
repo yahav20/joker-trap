@@ -44,7 +44,7 @@ export const Card: React.FC<CardProps> = ({ card, onPress, style, containerStyle
         return (
             <TouchableOpacity
                 activeOpacity={0.7}
-                onPress={onPress}
+                onPress={() => !disabled && onPress?.()}
                 disabled={disabled}
                 style={containerStyle}
             >

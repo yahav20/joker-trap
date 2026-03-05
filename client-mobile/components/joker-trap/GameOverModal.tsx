@@ -99,10 +99,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ payload, myPlayerI
 
                 {/* ── Action Row: Home ←  → Restart ── */}
                 <View style={styles.actionRow}>
-                    <TouchableOpacity style={[styles.btn, styles.homeBtn]} onPress={() => router.replace('/')}>
+                    <TouchableOpacity
+                        style={[styles.btn, styles.homeBtn]}
+                        onPress={() => router.replace('/')}
+                        accessibilityLabel="Home"
+                    >
                         <Text style={styles.btnText}>🏠</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.btn, styles.restartBtn]} onPress={onRestart}>
+                    <TouchableOpacity
+                        style={[styles.btn, styles.restartBtn]}
+                        onPress={onRestart}
+                        accessibilityLabel="Restart"
+                    >
                         <Text style={styles.btnText}>↺</Text>
                     </TouchableOpacity>
                 </View>
