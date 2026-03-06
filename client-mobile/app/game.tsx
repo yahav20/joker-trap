@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, SafeAreaView, ImageBackground, LayoutAnimation, Platform, UIManager, StyleSheet, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { useGameSocket } from '../hooks/useGameSocket';
 import { BACKGROUND } from '../constants/Cards';
@@ -37,10 +37,12 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
  */
 export default function App() {
     const router = useRouter();
+    const params = useLocalSearchParams<{ action: string, roomId?: string, bots?: string }>();
+
     const {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
-        currentTurn, opponents, myPlayerId, sendAction, connected, reconnect
-    } = useGameSocket();
+        currentTurn, opponents, myPlayerId, sendAction, connected, roomCode, reconnect
+    } = useGameSocket(params.action, params.roomId, params.bots);
 
     /**
      * Map player seat IDs to the three opponent UI positions.
@@ -113,12 +115,10 @@ export default function App() {
 
     // ── Lobby gate ───────────────────────────────────────────────────────────
 
-    // Show the lobby screen while the game has not started yet.
-    // Once a game_over payload arrives we render the board + GameOverModal instead.
     if (currentTurn?.phase === 'lobby' && !gameOverPayload) {
         return (
             <ImageBackground source={BACKGROUND} style={localStyles.background}>
-                <Lobby connected={connected} gameMessage={gameMessage} />
+                <Lobby connected={connected} gameMessage={gameMessage} roomCode={roomCode} />
             </ImageBackground>
         );
     }

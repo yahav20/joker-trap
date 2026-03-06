@@ -10,6 +10,8 @@ interface LobbyProps {
     connected: boolean;
     /** Latest server message (e.g. "Waiting for 2 more players..."). */
     gameMessage: string;
+    /** The active room code to share with other players. */
+    roomCode?: string | null;
 }
 
 /**
@@ -21,7 +23,7 @@ interface LobbyProps {
  *
  * Rendered by `game.tsx` when `currentTurn.phase === 'lobby'`.
  */
-export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage }) => {
+export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage, roomCode }) => {
     return (
         <SafeAreaView style={styles.lobbyContainer}>
             <View style={styles.lobbyBox}>
@@ -30,6 +32,14 @@ export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage }) => {
                 {!connected && (
                     <ActivityIndicator size="large" color="#ffffff" style={styles.loader} />
                 )}
+
+                {roomCode && (
+                    <View style={styles.roomCodeContainer}>
+                        <Text style={styles.roomCodeLabel}>ROOM CODE</Text>
+                        <Text style={styles.roomCodeValue}>{roomCode}</Text>
+                    </View>
+                )}
+
                 <Text style={styles.lobbyText}>
                     {connected ? "Waiting for players to join..." : "Connecting to server..."}
                 </Text>
@@ -72,4 +82,27 @@ const styles = StyleSheet.create({
     loader: {
         marginVertical: 20,
     },
+    roomCodeContainer: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 15,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginVertical: 15,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+        width: '100%',
+    },
+    roomCodeLabel: {
+        color: '#aaa',
+        fontSize: 12,
+        fontWeight: 'bold',
+        letterSpacing: 2,
+        marginBottom: 4,
+    },
+    roomCodeValue: {
+        color: '#FFD700',
+        fontSize: 32,
+        fontWeight: 'bold',
+        letterSpacing: 6,
+    }
 });

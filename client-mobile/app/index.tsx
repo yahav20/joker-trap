@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity,
-    ImageBackground, Modal, ScrollView, SafeAreaView
+    ImageBackground, Modal, ScrollView, SafeAreaView, TextInput, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BACKGROUND } from '../constants/Cards';
@@ -38,24 +38,39 @@ const RULES = [
     },
 ];
 
-/**
- * Home screen — the app's landing page.
- *
- * Provides two interactions:
- *  1. **Play** button: navigates to `/game` where the WebSocket connection is opened.
- *  2. **Game Rules** button: toggles the local `rulesVisible` state to show an in-app
- *     modal with the RULES content.
- *
- * This screen does NOT open a WebSocket; that happens in `app/game.tsx`.
- */
 export default function HomeScreen() {
     const router = useRouter();
-    /** Controls whether the scrollable rules modal is visible. */
     const [rulesVisible, setRulesVisible] = useState(false);
+
+    // Room logic state
+    const [createVisible, setCreateVisible] = useState(false);
+    const [joinVisible, setJoinVisible] = useState(false);
+    const [botCount, setBotCount] = useState(0);
+    const [roomCodeInput, setRoomCodeInput] = useState('');
+
+    const handleCreateRoom = () => {
+        setCreateVisible(false);
+        router.push({ pathname: '/game', params: { action: 'create', bots: botCount.toString() } });
+    };
+
+    const handleJoinRoom = () => {
+        if (!roomCodeInput.trim()) return;
+        setJoinVisible(false);
+        router.push({ pathname: '/game', params: { action: 'join', roomId: roomCodeInput.trim().toUpperCase() } });
+    };
 
     return (
         <ImageBackground source={BACKGROUND} style={styles.background}>
             <SafeAreaView style={styles.container}>
+
+                {/* Game Rules Icon - Top Left */}
+                <TouchableOpacity
+                    style={styles.rulesIconButton}
+                    activeOpacity={0.7}
+                    onPress={() => setRulesVisible(true)}
+                >
+                    <Text style={styles.rulesIconText}>📖</Text>
+                </TouchableOpacity>
 
                 {/* Logo / Title */}
                 <View style={styles.titleBox}>
@@ -63,34 +78,92 @@ export default function HomeScreen() {
                     <Text style={styles.subtitle}>The Card Game</Text>
                 </View>
 
-                {/* Buttons */}
+                {/* Main Action Buttons */}
                 <View style={styles.buttonGroup}>
                     <TouchableOpacity
-                        style={styles.playButton}
+                        style={[styles.playButton, { backgroundColor: '#28a745' }]}
                         activeOpacity={0.85}
-                        onPress={() => router.push('/game')}
+                        onPress={() => setCreateVisible(true)}
                     >
-                        <Text style={styles.playButtonText}>▶  Play</Text>
+                        <Text style={styles.playButtonText}>CREATE{"\n"}ROOM</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={styles.rulesButton}
+                        style={[styles.playButton, { backgroundColor: '#004085' }]}
                         activeOpacity={0.85}
-                        onPress={() => setRulesVisible(true)}
+                        onPress={() => setJoinVisible(true)}
                     >
-                        <Text style={styles.rulesButtonText}>📖  Game Rules</Text>
+                        <Text style={styles.playButtonText}>JOIN ROOM</Text>
                     </TouchableOpacity>
                 </View>
 
             </SafeAreaView>
 
+            {/* Create Room Modal */}
+            <Modal visible={createVisible} transparent animationType="fade" onRequestClose={() => setCreateVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.smallModalBox}>
+                        <Text style={styles.modalTitle}>Create Room</Text>
+                        <Text style={styles.modalSubText}>How many bots should play?</Text>
+
+                        <View style={styles.botSelector}>
+                            {[0, 1, 2, 3].map(num => (
+                                <TouchableOpacity
+                                    key={num}
+                                    style={[styles.botOption, botCount === num && styles.botOptionActive]}
+                                    onPress={() => setBotCount(num)}
+                                >
+                                    <Text style={[styles.botOptionText, botCount === num && styles.botOptionTextActive]}>{num}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.modalActionRow}>
+                            <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => setCreateVisible(false)}>
+                                <Text style={styles.actionButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionButton, styles.confirmButton]} onPress={handleCreateRoom}>
+                                <Text style={styles.actionButtonText}>Create</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Join Room Modal */}
+            <Modal visible={joinVisible} transparent animationType="fade" onRequestClose={() => setJoinVisible(false)}>
+                <KeyboardAvoidingView
+                    style={styles.modalOverlay}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
+                    <View style={styles.smallModalBox}>
+                        <Text style={styles.modalTitle}>Join Room</Text>
+                        <Text style={styles.modalSubText}>Enter the room code shared with you.</Text>
+
+                        <TextInput
+                            style={styles.inputField}
+                            placeholder="e.g. A4K9B"
+                            placeholderTextColor="#666"
+                            autoCapitalize="characters"
+                            maxLength={8}
+                            value={roomCodeInput}
+                            onChangeText={setRoomCodeInput}
+                        />
+
+                        <View style={styles.modalActionRow}>
+                            <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => setJoinVisible(false)}>
+                                <Text style={styles.actionButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionButton, styles.confirmButton, !roomCodeInput.trim() && { opacity: 0.5 }]} onPress={handleJoinRoom} disabled={!roomCodeInput.trim()}>
+                                <Text style={styles.actionButtonText}>Join</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
             {/* Game Rules Modal */}
-            <Modal
-                visible={rulesVisible}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setRulesVisible(false)}
-            >
+            <Modal visible={rulesVisible} transparent animationType="fade" onRequestClose={() => setRulesVisible(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalBox}>
                         <Text style={styles.modalTitle}>Game Rules</Text>
@@ -102,10 +175,7 @@ export default function HomeScreen() {
                                 </View>
                             ))}
                         </ScrollView>
-                        <TouchableOpacity
-                            style={styles.closeButton}
-                            onPress={() => setRulesVisible(false)}
-                        >
+                        <TouchableOpacity style={styles.closeButton} onPress={() => setRulesVisible(false)}>
                             <Text style={styles.closeButtonText}>Close</Text>
                         </TouchableOpacity>
                     </View>
@@ -128,61 +198,77 @@ const styles = StyleSheet.create({
         marginBottom: 50,
     },
     title: {
-        fontSize: 56,
-        fontWeight: 'bold',
+        fontSize: 54,
+        fontWeight: '900',
         color: '#FFD700',
-        textShadowColor: '#000',
-        textShadowOffset: { width: 3, height: 3 },
-        textShadowRadius: 8,
-        letterSpacing: 2,
+        textShadowColor: 'rgba(0, 0, 0, 0.8)',
+        textShadowOffset: { width: 2, height: 2 },
+        textShadowRadius: 4,
+        letterSpacing: 1,
     },
     subtitle: {
-        fontSize: 18,
-        color: 'rgba(255,255,255,0.7)',
+        fontSize: 14,
+        color: '#ffffff',
         marginTop: 4,
         letterSpacing: 4,
         textTransform: 'uppercase',
+        fontWeight: 'bold',
+        textShadowColor: 'rgba(0, 0, 0, 0.8)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
     },
     buttonGroup: {
         gap: 16,
         alignItems: 'center',
     },
     playButton: {
-        backgroundColor: '#28a745',
-        paddingVertical: 16,
-        paddingHorizontal: 60,
-        borderRadius: 50,
+        paddingVertical: 12,
+        paddingHorizontal: 30,
+        borderRadius: 40,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.5,
+        shadowRadius: 6,
+        elevation: 6,
+        width: 180,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 60,
         borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.3)',
-        shadowColor: '#28a745',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.6,
-        shadowRadius: 12,
-        elevation: 8,
+        borderColor: 'rgba(255,255,255,0.2)',
     },
     playButtonText: {
         color: '#fff',
-        fontSize: 22,
-        fontWeight: 'bold',
+        fontSize: 16,
+        fontWeight: '900',
         letterSpacing: 1,
+        textTransform: 'uppercase',
+        textAlign: 'center',
+        textShadowColor: 'rgba(0,0,0,0.4)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
     },
-    rulesButton: {
+    rulesIconButton: {
+        position: 'absolute',
+        top: 20,
+        left: 20,
         backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingVertical: 12,
-        paddingHorizontal: 40,
-        borderRadius: 50,
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.25)',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+        zIndex: 10,
     },
-    rulesButtonText: {
-        color: '#ddd',
-        fontSize: 17,
-        fontWeight: '600',
+    rulesIconText: {
+        fontSize: 22,
     },
-    // Rules Modal
+    // Modals
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.82)',
+        backgroundColor: 'rgba(0,0,0,0.7)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
@@ -197,12 +283,33 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#444',
     },
+    smallModalBox: {
+        backgroundColor: 'rgba(20,20,25,0.95)',
+        borderRadius: 24,
+        padding: 30,
+        width: '90%',
+        maxWidth: 400,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.8,
+        shadowRadius: 20,
+        elevation: 15,
+    },
     modalTitle: {
         color: '#FFD700',
-        fontSize: 22,
+        fontSize: 24,
         fontWeight: 'bold',
         textAlign: 'center',
-        marginBottom: 16,
+        marginBottom: 8,
+    },
+    modalSubText: {
+        color: '#ccc',
+        fontSize: 15,
+        textAlign: 'center',
+        marginBottom: 24,
     },
     rulesScroll: { marginBottom: 16 },
     ruleSection: { marginBottom: 16 },
@@ -230,4 +337,72 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
+
+    // Room Config specific
+    botSelector: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 12,
+        marginBottom: 30,
+    },
+    botOption: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#333',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#555'
+    },
+    botOptionActive: {
+        backgroundColor: '#28a745',
+        borderColor: '#fff'
+    },
+    botOptionText: {
+        color: '#aaa',
+        fontSize: 20,
+        fontWeight: 'bold'
+    },
+    botOptionTextActive: {
+        color: '#fff'
+    },
+    inputField: {
+        backgroundColor: '#222',
+        borderWidth: 1,
+        borderColor: '#555',
+        borderRadius: 8,
+        color: '#fff',
+        fontSize: 24,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        width: '100%',
+        textAlign: 'center',
+        marginBottom: 30,
+        letterSpacing: 4,
+        fontWeight: 'bold'
+    },
+    modalActionRow: {
+        flexDirection: 'row',
+        width: '100%',
+        gap: 12,
+        justifyContent: 'space-between'
+    },
+    actionButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    cancelButton: {
+        backgroundColor: '#444',
+    },
+    confirmButton: {
+        backgroundColor: '#007bff',
+    },
+    actionButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold'
+    }
 });
