@@ -22,6 +22,14 @@ const GameState = require("../src/game/GameState");
 const BotAdapter = require("../src/ai/BotAdapter");
 const { totalCards } = require("../src/game/rules");
 
+const originalSetTimeout = global.setTimeout;
+beforeAll(() => {
+    global.setTimeout = (cb) => setImmediate(cb);
+});
+afterAll(() => {
+    global.setTimeout = originalSetTimeout;
+});
+
 // Allow up to 15 s for the bots to finish a full game
 jest.setTimeout(15_000);
 
