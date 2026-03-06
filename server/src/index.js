@@ -12,5 +12,4 @@
 const { startServer } = require("./network/socketServer");
 const { PORT } = require("./config/constant");
 
-const botCount = 3
-startServer(PORT, botCount);
+startServer(PORT);

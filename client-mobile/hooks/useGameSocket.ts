@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * - 10.0.2.2 maps to the host machine's loopback interface from an Android emulator.
  * - Override via the EXPO_PUBLIC_WS_URL environment variable for physical devices or prod.
  */
-const SERVER_URL = "wss://joker-trap.onrender.com";
+const SERVER_URL = "ws://joker-trap.onrender.com";
 
 /**
  * A single playing card.
@@ -82,7 +82,8 @@ export type GameOverPayload = {
  *  - `connected`       – whether the socket is currently open
  *  - `reconnect`       – manually re-initiate the WebSocket connection
  */
-export const useGameSocket = () => {
+export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?: string) => {
+    const [roomCode, setRoomCode] = useState<string | null>(null);
     /** This player's unique seat ID (0–3), assigned by the server after connection. */
     const [myPlayerId, setMyPlayerId] = useState<number | null>(null);
 
@@ -148,7 +149,14 @@ export const useGameSocket = () => {
         /** Called once the socket handshake completes. */
         ws.current.onopen = () => {
             setConnected(true);
-            setGameMessage('Connected. Waiting for players...');
+            setGameMessage('Connected. Joining room...');
+
+            // Send the initial room request
+            if (action === 'create') {
+                ws.current?.send(JSON.stringify({ event: 'create_room', payload: { botCount: parseInt(botsParam || '0', 10) } }));
+            } else if (action === 'join' && roomIdParam) {
+                ws.current?.send(JSON.stringify({ event: 'join_room', payload: { roomId: roomIdParam } }));
+            }
         };
 
         /**
@@ -169,6 +177,24 @@ export const useGameSocket = () => {
                 };
 
                 switch (action) {
+                    /**
+                     * 'room_created' — the server successfully created a new room.
+                     * We store the room code so it can be displayed in the lobby.
+                     */
+                    case 'room_created':
+                        setRoomCode(payload.roomId);
+                        setGameMessage(payload.message || `Room Code: ${payload.roomId}`);
+                        break;
+
+                    /**
+                     * 'room_joined' — the server successfully added us to an existing room.
+                     * We store the room code so it can be displayed in the lobby.
+                     */
+                    case 'room_joined':
+                        setRoomCode(payload.roomId);
+                        setGameMessage(payload.message || `Joined Room: ${payload.roomId}`);
+                        break;
+
                     /**
                      * 'waiting' — server reports the lobby is not yet full.
                      * We update the status message but stay in the lobby phase.
@@ -394,7 +420,7 @@ export const useGameSocket = () => {
 
     return {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
-        currentTurn, opponents, myPlayerId, sendAction, connected,
+        currentTurn, opponents, myPlayerId, sendAction, connected, roomCode,
         reconnect: connect
     };
 };

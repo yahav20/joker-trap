@@ -1,7 +1,7 @@
 /**
  * socketServer.js
- * WebSocket glue layer. Manages connections and routes client messages
- * to the GameState machine. Does NOT contain any game logic.
+ * WebSocket glue layer. Manages connections, rooms, and routes client messages
+ * to their respective GameState machine.
  */
 
 const WebSocket = require("ws");
@@ -9,74 +9,31 @@ const GameState = require("../game/GameState");
 const BotAdapter = require("../ai/BotAdapter");
 const logger = require("../utils/logger");
 const { PORT, PLAYER_COUNT } = require("../config/constant");
+const { generateRoomCode } = require("../utils/roomIdFormatter");
+
+// In-memory map of active rooms: Map<string, RoomObject>
+const rooms = new Map();
 
 let wss = null;
-let connectedClients = [];
-let game = null;
 
 /**
  * Creates and starts the WebSocket server.
  *
  * @param {number} [port=PORT]
- * @param {number} [botCount=0]  How many bot players to auto-fill.
- *   Set to (PLAYER_COUNT - 1) to allow a single human to play against all bots.
- *   Bots are always assigned the highest player IDs.
  */
-function startServer(port = PORT, botCount = 0) {
+function startServer(port = PORT) {
     wss = new WebSocket.Server({ port, host: '0.0.0.0' });
-    logger.info(`Joker Trap WebSocket Server running on ws://0.0.0.0:${port} (bots: ${botCount})`);
+    logger.info(`Joker Trap WebSocket Server running on ws://0.0.0.0:${port}`);
 
     wss.on("connection", (ws) => {
-        // Reject if game in progress or room full
-        if ((game && !game.over) || connectedClients.length >= PLAYER_COUNT) {
-            ws.send(JSON.stringify({
-                event: "error",
-                payload: { message: "Room is full or game already in progress." },
-            }));
-            ws.close();
-            return;
-        }
+        // Assign a temporary unique ID for tracking before joining a room
+        ws.id = Math.random().toString(36).substring(2, 9);
+        ws.roomId = null; // The room this client belongs to
 
-        connectedClients.push(ws);
-        const playerIndex = connectedClients.length - 1;
-        logger.info(`Player ${playerIndex} connected (${connectedClients.length}/${PLAYER_COUNT})`);
-        ws.playerId = playerIndex;
-
-        // Update the waiting message with remaining human slots needed
-        const humanSlotsNeeded = PLAYER_COUNT - botCount - connectedClients.length;
         ws.send(JSON.stringify({
-            event: "waiting",
-            payload: {
-                message: `You are Player ${playerIndex}. Waiting for ${Math.max(0, humanSlotsNeeded)} more human player(s)...`,
-            },
+            event: "connected",
+            payload: { message: "Connected to server. Create or join a room." },
         }));
-
-        // Start when enough humans have connected to fill the non-bot slots
-        const humanSlotsRequired = PLAYER_COUNT - botCount;
-        if (connectedClients.length === humanSlotsRequired) {
-            logger.info(`All human players connected (${connectedClients.length}/${humanSlotsRequired}) – adding ${botCount} bot(s) and starting game!`);
-
-            // Build human adapters first (IDs 0…humanCount-1)
-            const adapters = _buildAdapters([...connectedClients]);
-
-            // Build bot adapters (IDs humanCount…PLAYER_COUNT-1)
-            const bots = [];
-            for (let b = 0; b < botCount; b++) {
-                const botId = connectedClients.length + b;
-                const bot = new BotAdapter(botId);
-                adapters.push(bot);
-                bots.push(bot);
-            }
-
-            game = new GameState(adapters);
-
-            // Give each bot a reference to the game so it can call back
-            for (const bot of bots) {
-                bot.attachGame(game);
-            }
-
-            game.start("Game started!");
-        }
 
         ws.on("message", (raw) => {
             let data;
@@ -89,34 +46,89 @@ function startServer(port = PORT, botCount = 0) {
 
             const { event, payload = {} } = data;
 
+            // Handle Room Creation
+            if (event === "create_room") {
+                if (ws.roomId) return _sendError(ws, "You are already in a room.");
+
+                let botCount = parseInt(payload.botCount || 0, 10);
+                if (isNaN(botCount) || botCount < 0 || botCount > 3) botCount = 0;
+
+                const roomId = generateRoomCode(5);
+                const newRoom = {
+                    id: roomId,
+                    botCount,
+                    clients: [ws],
+                    game: null,
+                };
+
+                rooms.set(roomId, newRoom);
+                ws.roomId = roomId;
+                ws.playerId = 0; // Creator is always Player 0 initially
+
+                logger.info(`Room created: ${roomId} (bots: ${botCount}) by client ${ws.id}`);
+
+                ws.send(JSON.stringify({
+                    event: "room_created",
+                    payload: { roomId, botCount, message: `Room created. Code: ${roomId}` }
+                }));
+
+                _checkRoomStart(newRoom);
+                return;
+            }
+
+            // Handle Room Joining
+            if (event === "join_room") {
+                if (ws.roomId) return _sendError(ws, "You are already in a room.");
+
+                const roomId = (payload.roomId || "").trim().toUpperCase();
+                const room = rooms.get(roomId);
+
+                if (!room) return _sendError(ws, `Room not found: ${roomId}`);
+                if (room.game && !room.game.over) return _sendError(ws, "Game already in progress.");
+
+                const maxHumans = PLAYER_COUNT - room.botCount;
+                if (room.clients.length >= maxHumans) return _sendError(ws, "Room is full.");
+
+                room.clients.push(ws);
+                ws.roomId = roomId;
+                ws.playerId = room.clients.length - 1;
+
+                logger.info(`Client ${ws.id} joined room ${roomId} (Player ${ws.playerId})`);
+
+                ws.send(JSON.stringify({
+                    event: "room_joined",
+                    payload: { roomId, botCount: room.botCount, message: `Joined room ${roomId}` }
+                }));
+
+                _checkRoomStart(room);
+                return;
+            }
+
+            // Must be in a room for all other events
+            if (!ws.roomId) {
+                return _sendError(ws, "You must create or join a room first.");
+            }
+
+            const room = rooms.get(ws.roomId);
+            if (!room) {
+                ws.roomId = null;
+                return _sendError(ws, "Your room no longer exists.");
+            }
+
+            const game = room.game;
+
             // Handle Restart even if game is over
             if (event === "restart_game") {
                 if (game && game.over) {
-                    logger.info("Restart requested. Re-initializing game...");
-                    const humanCount = connectedClients.length;
-                    const botCount = PLAYER_COUNT - humanCount;
-
-                    // Assign difficulty levels to bots
-                    const adapters = _buildAdapters([...connectedClients]);
-                    const bots = [];
-                    for (let b = 0; b < botCount; b++) {
-                        const botId = humanCount + b;
-                        // For a harder game, assign 'hard' to at least one bot
-                        const difficulty = b === 0 ? 'hard' : 'medium';
-                        const bot = new BotAdapter(botId, difficulty, 0.25, PLAYER_COUNT);
-                        adapters.push(bot);
-                        bots.push(bot);
-                    }
-                    game = new GameState(adapters);
-                    for (const bot of bots) bot.attachGame(game);
-                    game.start("Game Restarted!");
+                    logger.info(`Restart requested in room ${room.id}. Re-initializing game...`);
+                    _startGame(room);
                 }
                 return;
             }
 
             if (!game || game.over) return;
 
-            // Find which player sent this message
+            // Find which player in the GameState corresponds to this WebSocket
             const player = game.players.find(p => p.id === ws.playerId);
             if (!player) return;
 
@@ -130,24 +142,6 @@ function startServer(port = PORT, botCount = 0) {
                 case "make_decision":
                     game.handleDecision(player.id, payload.decision);
                     break;
-                case "restart_game":
-                    if (game && game.over) {
-                        logger.info("Restart requested. Re-initializing game...");
-                        const humanCount = connectedClients.length;
-                        const botCount = PLAYER_COUNT - humanCount;
-                        const adapters = _buildAdapters([...connectedClients]);
-                        const bots = [];
-                        for (let b = 0; b < botCount; b++) {
-                            const botId = humanCount + b;
-                            const bot = new BotAdapter(botId, 0.30, PLAYER_COUNT);
-                            adapters.push(bot);
-                            bots.push(bot);
-                        }
-                        game = new GameState(adapters);
-                        for (const bot of bots) bot.attachGame(game);
-                        game.start("Game Restarted!");
-                    }
-                    break;
                 default:
                     ws.send(JSON.stringify({
                         event: "error",
@@ -157,18 +151,95 @@ function startServer(port = PORT, botCount = 0) {
         });
 
         ws.on("close", () => {
-            logger.info(`Player ${connectedClients.indexOf(ws)} disconnected.`);
-            connectedClients = connectedClients.filter(c => c !== ws);
-            if (game && !game.over) {
-                game.players.forEach(p =>
-                    p.send("error", { message: "A player disconnected. Game aborted." })
-                );
-                game = null;
+            if (ws.roomId) {
+                const room = rooms.get(ws.roomId);
+                if (room) {
+                    room.clients = room.clients.filter(c => c !== ws);
+                    logger.info(`Client ${ws.id} disconnected from room ${ws.roomId}.`);
+
+                    if (room.game && !room.game.over) {
+                        room.game.players.forEach(p =>
+                            p.send("error", { message: "A player disconnected. Game aborted." })
+                        );
+                        room.game = null;
+                    }
+
+                    // Cleanup empty rooms
+                    if (room.clients.length === 0) {
+                        logger.info(`Room ${ws.roomId} is empty. Deleting.`);
+                        rooms.delete(ws.roomId);
+                    }
+                }
             }
         });
     });
 
     return wss;
+}
+
+/**
+ * Checks if a room has enough human players to start, and starts the game if so.
+ *
+ * @param {Object} room
+ */
+function _checkRoomStart(room) {
+    const requiredHumans = PLAYER_COUNT - room.botCount;
+    const currentHumans = room.clients.length;
+
+    if (currentHumans < requiredHumans) {
+        // Still waiting
+        const waitingFor = requiredHumans - currentHumans;
+        const msg = JSON.stringify({
+            event: "waiting",
+            payload: {
+                message: `Waiting for ${waitingFor} more human player(s) to join...`,
+            },
+        });
+        room.clients.forEach(c => c.send(msg));
+    } else if (currentHumans === requiredHumans) {
+        // Start game
+        logger.info(`Room ${room.id} is full. Starting game with ${room.botCount} bots.`);
+        _startGame(room);
+    }
+}
+
+/**
+ * Instantiates the Game State and begins the round.
+ * 
+ * @param {Object} room 
+ */
+function _startGame(room) {
+    const adapters = _buildAdapters([...room.clients]);
+    const bots = [];
+
+    // Make sure we have enough bots to fill the rest of the game
+    const botCount = PLAYER_COUNT - room.clients.length;
+
+    for (let b = 0; b < botCount; b++) {
+        const botId = room.clients.length + b;
+        // Basic bot setup. We can map difficulty here if needed in future
+        const difficulty = b === 0 ? 'hard' : 'medium';
+        const bot = new BotAdapter(botId, difficulty, 0.25, PLAYER_COUNT);
+        adapters.push(bot);
+        bots.push(bot);
+    }
+
+    room.game = new GameState(adapters);
+
+    for (const bot of bots) {
+        bot.attachGame(room.game);
+    }
+
+    room.game.start("Game started!");
+}
+
+/**
+ * Sends a generic error.
+ */
+function _sendError(ws, message) {
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ event: "error", payload: { message } }));
+    }
 }
 
 /**
@@ -179,7 +250,7 @@ function startServer(port = PORT, botCount = 0) {
  * @returns {Array<{ id: number, send: Function }>}
  */
 function _buildAdapters(clients) {
-    return clients.map((ws, index) => ({
+    return clients.map((ws) => ({
         id: ws.playerId,
         send(event, payload) {
             if (ws.readyState === WebSocket.OPEN) {
