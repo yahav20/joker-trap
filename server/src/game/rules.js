@@ -23,13 +23,15 @@ function cardLabel(card) {
  * @returns {string|null}  The winning rank, or null if no quad exists.
  */
 function findQuad(hand) {
+    if (hand.length !== 4) return null;
+
     const counts = {};
     for (const card of hand) {
         if (card.rank === "Joker") continue;
         counts[card.rank] = (counts[card.rank] || 0) + 1;
     }
     for (const [rank, count] of Object.entries(counts)) {
-        if (count >= 4) return rank;
+        if (count === 4) return rank;
     }
     return null;
 }

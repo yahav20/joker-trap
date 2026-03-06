@@ -22,17 +22,24 @@ const {
     decideFirstDecision,
     decideSecondDecision,
 } = require("./SimpleBot");
+const {
+    decideRequestAdvanced,
+    decideOfferAdvanced,
+    decideDecisionAdvanced,
+} = require("./AdvancedBot");
 const { PLAYER_COUNT } = require("../config/constant");
 const logger = require("../utils/logger");
 
 class BotAdapter {
     /**
      * @param {number} id          Unique player ID assigned to this bot.
+     * @param {string} [difficulty='medium']  'easy', 'medium', or 'hard'.
      * @param {number} [bluffChance=0.30]  Probability of passing Joker on first offer.
      * @param {number} [playerCount=PLAYER_COUNT]
      */
-    constructor(id, bluffChance = 0.30, playerCount = PLAYER_COUNT) {
+    constructor(id, difficulty = 'medium', bluffChance = 0.30, playerCount = PLAYER_COUNT) {
         this.id = id;
+        this.difficulty = difficulty;
         this.bluffChance = bluffChance;
 
         /** @type {import('../game/GameState')|null} */
@@ -49,7 +56,7 @@ class BotAdapter {
 
         this.send = this.send.bind(this);
 
-        logger.info(`[Bot ${id}] Created with bluffChance=${bluffChance}`);
+        logger.info(`[Bot ${id}] Created with difficulty=${difficulty}, bluffChance=${bluffChance}`);
     }
 
     /**
@@ -165,7 +172,7 @@ class BotAdapter {
         // If bot is the receiver and it's time to request, do so.
         if (receiver === this.id && phase === "waiting_for_request") {
             this._offerCount = 0;
-            setImmediate(() => this._doRequest());
+            setTimeout(() => this._doRequest(), 1500);
         }
     }
 
@@ -179,7 +186,7 @@ class BotAdapter {
         this.memory.recordRequest(receiverId, requestedRank);
 
         this._offerCount = 1;
-        setImmediate(() => this._doOffer(/* isSecondOffer */ false));
+        setTimeout(() => this._doOffer(/* isSecondOffer */ false), 1500);
     }
 
     /** Receiver (bot) must decide: accept or reject. */
@@ -187,10 +194,16 @@ class BotAdapter {
         const offerNumber = payload.offerNumber; // 1 or 2
         const senderId = this._currentSenderId();
 
-        setImmediate(() => {
+        setTimeout(() => {
             if (offerNumber === 1) {
-                const decision = decideFirstDecision(this.memory, senderId);
-                logger.info(`[Bot ${this.id}] First decision: ${decision} (suspicion of P${senderId}: ${this.memory.suspicionOf(senderId).toFixed(2)})`);
+                let decision;
+                if (this.difficulty === 'hard') {
+                    decision = decideDecisionAdvanced(this.memory, senderId, this.game.turnState.requestedRank, 1);
+                } else {
+                    decision = decideFirstDecision(this.memory, senderId);
+                }
+
+                logger.info(`[Bot ${this.id}] First decision (${this.difficulty}): ${decision} (suspicion of P${senderId}: ${this.memory.suspicionOf(senderId).toFixed(2)})`);
 
                 if (decision === "reject") {
                     this.memory.recordOffer(senderId, this.id, false, 1);
@@ -198,18 +211,23 @@ class BotAdapter {
 
                 this.game.handleDecision(this.id, decision);
             } else {
-                const decision = decideSecondDecision(this.memory, senderId);
-                logger.info(`[Bot ${this.id}] Second decision: ${decision}`);
+                let decision;
+                if (this.difficulty === 'hard') {
+                    decision = decideDecisionAdvanced(this.memory, senderId, this.game.turnState.requestedRank, 2);
+                } else {
+                    decision = decideSecondDecision(this.memory, senderId);
+                }
+                logger.info(`[Bot ${this.id}] Second decision (${this.difficulty}): ${decision}`);
                 this.game.handleDecision(this.id, decision);
             }
-        });
+        }, 1500);
     }
 
     /** Sender (bot) must offer a second card. */
     _onSecondOfferNeeded(payload) {
         if (payload.yourHand) this.hand = payload.yourHand;
         this._offerCount = 2;
-        setImmediate(() => this._doOffer(/* isSecondOffer */ true));
+        setTimeout(() => this._doOffer(/* isSecondOffer */ true), 1500);
     }
 
     /** Sender (bot) must offer a mandatory third card. */
@@ -217,24 +235,41 @@ class BotAdapter {
         if (payload.yourHand) this.hand = payload.yourHand;
         this._offerCount = 3;
         // On the 3rd forced offer just pick a card (still use offer logic but it's mandatory)
-        setImmediate(() => this._doOffer(/* isSecondOffer */ true));
+        setTimeout(() => this._doOffer(/* isSecondOffer */ true), 1500);
     }
 
     // ─── Action helpers ───────────────────────────────────────────────────────
 
     _doRequest() {
-        const rank = decideRequest(this.hand);
-        logger.info(`[Bot ${this.id}] Requesting rank: ${rank} (hand size: ${this.hand.length})`);
+        let rank;
+        if (this.difficulty === 'hard') {
+            rank = decideRequestAdvanced(this.hand, this.memory);
+        } else {
+            rank = decideRequest(this.hand);
+        }
+        logger.info(`[Bot ${this.id}] Requesting rank (${this.difficulty}): ${rank} (hand size: ${this.hand.length})`);
         this.game.handleRequestCard(this.id, rank);
     }
 
     _doOffer(isSecondOffer) {
-        const cardIndex = decideOffer(
-            this.hand,
-            this.memory,
-            this.bluffChance,
-            isSecondOffer
-        );
+        let cardIndex;
+        if (this.difficulty === 'hard') {
+            cardIndex = decideOfferAdvanced(
+                this.hand,
+                this.memory,
+                this._currentReceiverId(),
+                this.game.turnState.requestedRank,
+                this.bluffChance,
+                isSecondOffer
+            );
+        } else {
+            cardIndex = decideOffer(
+                this.hand,
+                this.memory,
+                this.bluffChance,
+                isSecondOffer
+            );
+        }
         const card = this.hand[cardIndex];
         const label = card
             ? (card.rank === "Joker" ? "Joker" : `${card.rank}_${card.suit}`)

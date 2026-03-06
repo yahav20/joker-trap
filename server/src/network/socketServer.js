@@ -23,8 +23,8 @@ let game = null;
  *   Bots are always assigned the highest player IDs.
  */
 function startServer(port = PORT, botCount = 0) {
-    wss = new WebSocket.Server({ port });
-    logger.info(`Joker Trap WebSocket Server running on ws://localhost:${port} (bots: ${botCount})`);
+    wss = new WebSocket.Server({ port, host: '0.0.0.0' });
+    logger.info(`Joker Trap WebSocket Server running on ws://0.0.0.0:${port} (bots: ${botCount})`);
 
     wss.on("connection", (ws) => {
         // Reject if game in progress or room full
@@ -79,8 +79,6 @@ function startServer(port = PORT, botCount = 0) {
         }
 
         ws.on("message", (raw) => {
-            if (!game || game.over) return;
-
             let data;
             try {
                 data = JSON.parse(raw);
@@ -89,11 +87,38 @@ function startServer(port = PORT, botCount = 0) {
                 return;
             }
 
+            const { event, payload = {} } = data;
+
+            // Handle Restart even if game is over
+            if (event === "restart_game") {
+                if (game && game.over) {
+                    logger.info("Restart requested. Re-initializing game...");
+                    const humanCount = connectedClients.length;
+                    const botCount = PLAYER_COUNT - humanCount;
+
+                    // Assign difficulty levels to bots
+                    const adapters = _buildAdapters([...connectedClients]);
+                    const bots = [];
+                    for (let b = 0; b < botCount; b++) {
+                        const botId = humanCount + b;
+                        // For a harder game, assign 'hard' to at least one bot
+                        const difficulty = b === 0 ? 'hard' : 'medium';
+                        const bot = new BotAdapter(botId, difficulty, 0.25, PLAYER_COUNT);
+                        adapters.push(bot);
+                        bots.push(bot);
+                    }
+                    game = new GameState(adapters);
+                    for (const bot of bots) bot.attachGame(game);
+                    game.start("Game Restarted!");
+                }
+                return;
+            }
+
+            if (!game || game.over) return;
+
             // Find which player sent this message
             const player = game.players.find(p => p.id === ws.playerId);
             if (!player) return;
-
-            const { event, payload = {} } = data;
 
             switch (event) {
                 case "request_card":
@@ -104,6 +129,24 @@ function startServer(port = PORT, botCount = 0) {
                     break;
                 case "make_decision":
                     game.handleDecision(player.id, payload.decision);
+                    break;
+                case "restart_game":
+                    if (game && game.over) {
+                        logger.info("Restart requested. Re-initializing game...");
+                        const humanCount = connectedClients.length;
+                        const botCount = PLAYER_COUNT - humanCount;
+                        const adapters = _buildAdapters([...connectedClients]);
+                        const bots = [];
+                        for (let b = 0; b < botCount; b++) {
+                            const botId = humanCount + b;
+                            const bot = new BotAdapter(botId, 0.30, PLAYER_COUNT);
+                            adapters.push(bot);
+                            bots.push(bot);
+                        }
+                        game = new GameState(adapters);
+                        for (const bot of bots) bot.attachGame(game);
+                        game.start("Game Restarted!");
+                    }
                     break;
                 default:
                     ws.send(JSON.stringify({
