@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * - 10.0.2.2 maps to the host machine's loopback interface from an Android emulator.
  * - Override via the EXPO_PUBLIC_WS_URL environment variable for physical devices or prod.
  */
-const WS_URL = 'ws://10.0.2.2:8080'; // Android emulator → host loopback; override via .env
+const SERVER_URL = "wss://joker-trap.onrender.com";
 
 /**
  * A single playing card.
@@ -139,7 +139,7 @@ export const useGameSocket = () => {
      * which prevents the mount `useEffect` below from running more than once.
      */
     const connect = useCallback(() => {
-        const HOST = process.env.EXPO_PUBLIC_WS_URL || 'ws://10.100.102.1:8080';
+        const HOST = process.env.EXPO_PUBLIC_WS_URL || SERVER_URL;
         console.log('Connecting to:', HOST);
         setGameMessage('Connecting to server...');
 
