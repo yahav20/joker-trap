@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * - 10.0.2.2 maps to the host machine's loopback interface from an Android emulator.
  * - Override via the EXPO_PUBLIC_WS_URL environment variable for physical devices or prod.
  */
-const SERVER_URL = "ws://joker-trap.onrender.com";
+const SERVER_URL = "wss://joker-trap.onrender.com";
 
 /**
  * A single playing card.
