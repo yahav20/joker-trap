@@ -1,6 +1,6 @@
 # 🃏 Joker Trap
 
-A real-time multiplayer bluffing card game built with Node.js and WebSockets.
+A real-time multiplayer bluffing card game built with Node.js and WebSockets, featuring cross-platform clients (Mobile, CLI) and advanced psychological AI bots.
 
 ---
 
@@ -42,8 +42,18 @@ Receiver  →  decides: Accept / Reject / Force 3rd card
 > **Bluffing:** The sender may offer any card regardless of what was requested.  
 > **Privacy:** Spectators only see that an interaction ended — never which card was exchanged.
 
-### Turn Rotation
-After each transfer: old receiver → new sender · next player clockwise → new receiver.
+---
+
+## ✨ Key Features
+
+- **Cross-Platform Clients**: Play seamlessly from the React Native Mobile App (`client-mobile`), the Unity 3D client (`client-unity`), or the developer CLI (`client`).
+- **Dynamic Rooms**: Create private rooms with custom 5-letter invite codes.
+- **Advanced AI Bots**:
+  - Automatically fill empty room slots with bots (ranging from `medium` to `hard` difficulty).
+  - Bots utilise game theory and memory profiling to pass the Joker ambiguously based on a player's acceptance history.
+  - Bots actively try to collect "singletons" to block human players from completing quads if they hold the Joker.
+  - If a human disconnects mid-game, a Bot seamlessly takes over their hand and continues playing without aborting the match.
+- **Synchronised Restarts**: Games wait for all human players to vote to play again before reloading the room.
 
 ---
 
@@ -51,25 +61,16 @@ After each transfer: old receiver → new sender · next player clockwise → ne
 
 ```
 JokerTrap/
-├── package.json
-├── client/
-│   └── cli-client.js          # CLI client (connect & play in terminal)
-└── server/
-    ├── src/
-    │   ├── index.js           # Entry point
-    │   ├── config/
-    │   │   └── constant.js    # RANKS, SUITS, PHASES, PLAYER_COUNT, PORT
-    │   ├── game/
-    │   │   ├── Deck.js        # Build / shuffle / deal
-    │   │   ├── rules.js       # cardLabel, findQuad, validateRank
-    │   │   └── GameState.js   # Turn state machine (pure, no WebSocket)
-    │   ├── network/
-    │   │   └── socketServer.js # WebSocket glue layer
-    │   └── utils/
-    │       └── logger.js      # Tagged console logger
-    └── tests/
-        ├── gameLogic.test.js  # Deck, rules & card conservation tests
-        └── stateMachine.test.js # All 7 phase transitions & security
+├── server/
+│   ├── src/
+│   │   ├── index.js           # Production entry point (Render-ready)
+│   │   ├── ai/                # BotAdapter, BotMemory, AdvancedBot heuristics
+│   │   ├── game/              # Deck, rules, and GameState state machine
+│   │   └── network/           # socketServer.js (Rooms, disconnect handovers)
+│   └── tests/                 # 75+ Jest unit & socket integration tests
+├── client-mobile/             # Expo React Native App (iOS/Android)
+├── client-unity/              # Unity C# Client implementation
+└── client/                    # CLI testing client
 ```
 
 ---
@@ -79,39 +80,37 @@ JokerTrap/
 ### Prerequisites
 - Node.js v18+
 - npm
+- (Optional) Expo CLI for Mobile app
+- (Optional) Unity for 3D client
 
-### Install
+### Run the Server locally
 ```bash
+cd server
 npm install
-```
-
-### Start the server
-```bash
 npm start
 ```
+*The server is also fully configured for cloud deployment (e.g. Render) via `wss://`.*
 
-### Connect clients (open 4 separate terminals)
+### Connect a local CLI client
 ```bash
 node client/cli-client.js
 ```
-
-The game starts automatically once all 4 players connect.
+*(You will be prompted to create or join a room).*
 
 ---
 
 ## 🧪 Tests
 
 ```bash
+cd server
 npm test
 ```
 
-**50 tests** covering:
-- Deck building, shuffle, deal correctness
-- `findQuad` (Joker-aware), `validateRank`, `cardLabel`
-- All 7 phase transitions of the state machine
-- Turn rotation (4 full clockwise rounds)
-- Security: wrong-turn / wrong-phase rejections
-- Information hiding: spectators never see card details
+**75+ integrated tests** covering:
+- **Core game logic:** Deck building, shuffle, deal correctness, quad validation.
+- **State Machine:** All 7 protocol phase transitions and rejection of unauthorized actions.
+- **Bot Heuristics:** Tests ensuring logic for safe offerings, singleton hoarding, and Joker caching.
+- **Socket Integration:** Full WebSocket network simulation checking Room creations, `restart_game` synchronisation, and graceful Bot handover flows.
 
 ---
 
@@ -119,36 +118,23 @@ npm test
 
 ### Client → Server
 
-| Event | When | Payload |
-|---|---|---|
-| `request_card` | Receiver's turn | `{ rank: "J" \| "Q" \| "K" \| "A" }` |
-| `offer_card` | Sender's turn | `{ cardIndex: number }` |
-| `make_decision` | Receiver deciding | `{ decision: "accept" \| "reject" \| "accept_first" \| "accept_second" \| "force_third" }` |
+| Event | Payload |
+|---|---|
+| `create_room` | `{ botCount: number }` |
+| `join_room` | `{ roomId: string }` |
+| `restart_game` | `{}` |
+| `request_card` | `{ rank: "J" \| "Q" \| "K" \| "A" }` |
+| `offer_card` | `{ cardIndex: number }` |
+| `make_decision` | `{ decision: "accept" \| "reject" \| "accept_first" \| "accept_second" \| "force_third" }` |
 
 ### Server → Client
 
 | Event | Recipient | Description |
 |---|---|---|
-| `waiting` | Connecting player | Waiting room status |
-| `game_update` | All | Hand + current turn info |
-| `card_requested` | **Sender only** | What rank was requested |
-| `decision_needed` | **Receiver only** | Prompt to accept/reject |
-| `card_received` | **Receiver only** | What card they actually got |
-| `card_sent` | **Sender only** | Confirmation of transfer |
-| `interaction_update` | **Spectators only** | "Interaction complete" (no card info) |
+| `room_created` / `room_joined` | Event caller | Confirmation of room ID |
+| `waiting` | Connecting players | Waiting room messages (e.g. waiting for restarts) |
+| `game_update` | All | Broadcasts the updated turn phase, who is acting, and the player's literal hand. |
 | `game_over` | All | Final hands, winner IDs, loser ID |
-
----
-
-## 🔧 Architecture
-
-`GameState` is **pure** — it has no WebSocket dependency. Players are injected as adapter objects:
-
-```js
-{ id: number, send: (event, payload) => void }
-```
-
-This means the full game logic is testable without a live server, and the network layer (`socketServer.js`) can be swapped independently (e.g., for Socket.IO or HTTP later).
 
 ---
 
