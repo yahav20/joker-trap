@@ -58,6 +58,7 @@ function startServer(port = PORT) {
                     id: roomId,
                     botCount,
                     clients: [ws],
+                    bots: [],
                     game: null,
                 };
 
@@ -163,6 +164,7 @@ function startServer(port = PORT) {
                         room.botCount++;
 
                         const bot = new BotAdapter(ws.playerId, 'medium', 0.25, PLAYER_COUNT);
+                        room.bots.push(bot);
 
                         const oldAdapterIndex = room.game.players.findIndex(p => p.id === ws.playerId);
                         if (oldAdapterIndex !== -1) {
@@ -186,7 +188,8 @@ function startServer(port = PORT) {
 
                     // Cleanup empty rooms
                     if (room.clients.length === 0) {
-                        logger.info(`Room ${ws.roomId} is empty. Deleting.`);
+                        logger.info(`Room ${ws.roomId} is empty. Deleting game and room.`);
+                        room.bots.forEach(b => b.destroy());
                         rooms.delete(ws.roomId);
                     }
                 }
@@ -271,12 +274,12 @@ function _startGame(room) {
         const difficulty = b === 0 ? 'hard' : 'medium';
         const bot = new BotAdapter(botId, difficulty, 0.25, PLAYER_COUNT);
         adapters.push(bot);
-        bots.push(bot);
+        room.bots.push(bot);
     }
 
     room.game = new GameState(adapters);
 
-    for (const bot of bots) {
+    for (const bot of room.bots) {
         bot.attachGame(room.game);
     }
 
@@ -315,6 +318,10 @@ function _buildAdapters(clients) {
  */
 function closeServer() {
     if (wss) wss.close();
+    for (const room of rooms.values()) {
+        room.bots.forEach(b => b.destroy());
+    }
+    rooms.clear();
 }
 
 module.exports = { startServer, closeServer };

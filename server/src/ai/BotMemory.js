@@ -20,6 +20,15 @@ class BotMemory {
         this.playerCount = playerCount;
         this.botId = botId;
 
+        /** Track last requested rank of players to detect singleton collecting. */
+        this.lastRequestedRank = new Map();
+
+        /** History of accepted offer numbers per player (max 3). */
+        this.receiverDecisionHistory = new Map();
+        for (let i = 0; i < playerCount; i++) {
+            this.receiverDecisionHistory.set(i, []);
+        }
+
         /** @type {Array<Object>} */
         this.eventLog = [];
 
@@ -75,11 +84,21 @@ class BotMemory {
         this.eventLog.push({ type: "request", receiverId, rank, round: this.round });
         this.rankRequests.set(rank, (this.rankRequests.get(rank) ?? 0) + 1);
 
-        // If a player requests a rank, they LIKELY don't have it (but we track the intent)
-        // However, if we see someone REQUESTING a card, we know they are interest in it.
+        const lastReq = this.lastRequestedRank.get(receiverId);
+        if (lastReq) {
+            if (lastReq !== rank) {
+                // Changing request -> probably collecting singletons (Joker behaviour)
+                this._adjustSuspicion(receiverId, 0.15);
+            } else {
+                // Consistent request -> probably chasing quad
+                this._adjustSuspicion(receiverId, -0.05);
+            }
+        } else {
+            // First time requesting, minor drop in suspicion
+            this._adjustSuspicion(receiverId, -0.03);
+        }
 
-        // Players actively requesting are likely chasing a quad → slightly lower suspicion.
-        this._adjustSuspicion(receiverId, -0.03);
+        this.lastRequestedRank.set(receiverId, rank);
         this._normaliseSuspicion();
     }
 
@@ -106,6 +125,12 @@ class BotMemory {
         });
 
         if (accepted) {
+            // Record this decision
+            const history = this.receiverDecisionHistory.get(receiverId) || [];
+            history.push(offerNum);
+            if (history.length > 3) history.shift();
+            this.receiverDecisionHistory.set(receiverId, history);
+
             // Sender gave something away — slight suspicion that they passed the Joker.
             this._adjustSuspicion(senderId, 0.04);
         } else {
@@ -145,6 +170,30 @@ class BotMemory {
             }
             this.knownRanks.get(receiverId).add(card.rank);
         }
+    }
+
+    /**
+     * Determines which offer number (1, 2, or 3) a receiver most commonly accepts.
+     * Defaults to 1 if no history is available.
+     * @param {number} receiverId
+     * @returns {number}
+     */
+    getReceiverLikelyOfferNum(receiverId) {
+        const history = this.receiverDecisionHistory.get(receiverId);
+        if (!history || history.length === 0) return 1;
+
+        const counts = { 1: 0, 2: 0, 3: 0 };
+        history.forEach(n => counts[n]++);
+
+        let bestNum = 1;
+        let bestCount = -1;
+        for (const [num, count] of Object.entries(counts)) {
+            if (count > bestCount) {
+                bestCount = count;
+                bestNum = parseInt(num, 10);
+            }
+        }
+        return bestNum;
     }
 
     /** Call at the start of each new turn (after _advanceTurn). */

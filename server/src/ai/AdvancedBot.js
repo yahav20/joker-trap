@@ -17,11 +17,22 @@ function decideRequestAdvanced(hand, memory) {
         if (card.rank !== "Joker") counts[card.rank]++;
     }
 
-    // Sort ranks by what we are closest to (4-count)
-    const sortedRanks = RANKS.slice().sort((a, b) => counts[b] - counts[a]);
+    const hasJoker = hand.some(c => c.rank === "Joker");
 
-    // For now, return the best rank. 
-    // Logic could be expanded to pick WHICH player to ask.
+    if (hasJoker) {
+        // Collect singletons to block others: request a rank we have 0 of
+        const missingRanks = RANKS.filter(r => counts[r] === 0);
+        if (missingRanks.length > 0) {
+            return missingRanks[Math.floor(Math.random() * missingRanks.length)];
+        }
+    }
+
+    // Sort ranks by what we are closest to (4-count)
+    const sortedRanks = RANKS.slice().sort((a, b) => {
+        const diff = counts[b] - counts[a];
+        return diff !== 0 ? diff : Math.random() - 0.5;
+    });
+
     return sortedRanks[0];
 }
 
@@ -29,38 +40,57 @@ function decideRequestAdvanced(hand, memory) {
  * Advanced Offer:
  * Avoid giving the receiver exactly what they asked for if it helps them win.
  */
-function decideOfferAdvanced(hand, memory, receiverId, requestedRank, bluffChance, isSecondOffer) {
+function decideOfferAdvanced(hand, memory, receiverId, requestedRank, bluffChance, offerNum) {
     const jokerIndex = hand.findIndex(c => c.rank === "Joker");
-    if (jokerIndex !== -1 && (isSecondOffer || Math.random() < bluffChance)) {
-        return jokerIndex;
-    }
+    const hasJoker = jokerIndex !== -1;
 
-    // Filter cards: try to avoid giving the requestedRank if we have other choices
-    const nonRequestedIndices = [];
-    hand.forEach((card, index) => {
-        if (card.rank !== "Joker" && card.rank !== requestedRank) {
-            nonRequestedIndices.push(index);
+    if (hasJoker) {
+        const likelyOffer = memory.getReceiverLikelyOfferNum(receiverId) || 1;
+
+        // Always place Joker on the 3rd forced offer
+        if (offerNum === 3) return jokerIndex;
+
+        // If this is the offer they usually take, offer the Joker!
+        // Introduce slight randomness so we aren't 100% predictable
+        if (offerNum === likelyOffer || Math.random() < bluffChance) {
+            return jokerIndex;
         }
-    });
 
-    if (nonRequestedIndices.length > 0) {
-        // Find least valuable from non-requested
-        let bestIdx = nonRequestedIndices[0];
-        let minCount = 5;
+        // Otherwise, send a decoy (least valuable non-Joker)
         const counts = {};
         hand.forEach(c => { if (c.rank !== "Joker") counts[c.rank] = (counts[c.rank] || 0) + 1; });
-
-        for (const idx of nonRequestedIndices) {
-            if (counts[hand[idx].rank] < minCount) {
-                minCount = counts[hand[idx].rank];
-                bestIdx = idx;
+        let bestIdx = -1;
+        let minCount = Infinity;
+        hand.forEach((c, i) => {
+            if (c.rank !== "Joker" && (counts[c.rank] || 0) < minCount) {
+                minCount = counts[c.rank] || 0;
+                bestIdx = i;
             }
-        }
-        return bestIdx;
+        });
+        return bestIdx !== -1 ? bestIdx : 0;
     }
 
-    // Fallback to least valuable overall (excluding Joker)
-    return hand.findIndex(c => c.rank !== "Joker") || 0;
+    // --- Cooperative block: We DON'T have the Joker ---
+    // If we have the requested rank, GIVE it to them to help them win!
+    const requestedIndex = hand.findIndex(c => c.rank === requestedRank);
+    if (requestedIndex !== -1) {
+        return requestedIndex;
+    }
+
+    // Otherwise, offer the least valuable overall (decoy)
+    const counts = {};
+    hand.forEach(c => { if (c.rank !== "Joker") counts[c.rank] = (counts[c.rank] || 0) + 1; });
+    let bestIdx = hand.findIndex(c => c.rank !== "Joker") || 0;
+    if (bestIdx === -1) return 0; // safely fallback
+
+    let minCount = counts[hand[bestIdx].rank] || Infinity;
+    for (let i = 0; i < hand.length; i++) {
+        if (hand[i].rank !== "Joker" && (counts[hand[i].rank] || Infinity) < minCount) {
+            minCount = counts[hand[i].rank];
+            bestIdx = i;
+        }
+    }
+    return bestIdx;
 }
 
 /**
