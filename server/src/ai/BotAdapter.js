@@ -27,7 +27,7 @@ const {
     decideOfferAdvanced,
     decideDecisionAdvanced,
 } = require("./AdvancedBot");
-const { PLAYER_COUNT } = require("../config/constant");
+const { PLAYER_COUNT, PHASES } = require("../config/constant");
 const logger = require("../utils/logger");
 
 class BotAdapter {
@@ -65,6 +65,37 @@ class BotAdapter {
      */
     attachGame(game) {
         this.game = game;
+    }
+
+    /**
+     * Called when a bot replaces a disconnected player mid-game.
+     * Evaluates the current game state and synthesizes the correct event
+     * to trigger this bot into action if it's currently its turn.
+     */
+    resumeTurn() {
+        if (!this.game) return;
+        const ts = this.game.turnState;
+
+        if (ts.receiverIndex === this.id) {
+            if (ts.phase === PHASES.WAITING_FOR_REQUEST) {
+                this.send("game_update", {
+                    yourHand: this.hand,
+                    turn: { sender: ts.senderIndex, receiver: ts.receiverIndex, phase: ts.phase }
+                });
+            } else if (ts.phase === PHASES.WAITING_FOR_FIRST_DECISION) {
+                this.send("decision_needed", { offerNumber: 1 });
+            } else if (ts.phase === PHASES.WAITING_FOR_SECOND_DECISION) {
+                this.send("decision_needed", { offerNumber: 2 });
+            }
+        } else if (ts.senderIndex === this.id) {
+            if (ts.phase === PHASES.WAITING_FOR_FIRST_OFFER) {
+                this.send("card_requested", { requestedRank: ts.requestedRank });
+            } else if (ts.phase === PHASES.WAITING_FOR_SECOND_OFFER) {
+                this.send("second_offer_needed", {});
+            } else if (ts.phase === PHASES.WAITING_FOR_THIRD_OFFER) {
+                this.send("third_offer_needed", {});
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
