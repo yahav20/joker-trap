@@ -27,7 +27,7 @@ const {
     decideOfferAdvanced,
     decideDecisionAdvanced,
 } = require("./AdvancedBot");
-const { PLAYER_COUNT } = require("../config/constant");
+const { PLAYER_COUNT, PHASES } = require("../config/constant");
 const logger = require("../utils/logger");
 
 class BotAdapter {
@@ -51,6 +51,9 @@ class BotAdapter {
         /** Tracks whether the current offer is a 2nd/3rd offer (post-rejection). */
         this._offerCount = 0;
 
+        /** Track the active timeout so it can be cleanly aborted. */
+        this.timeoutId = null;
+
         /** @type {BotMemory} */
         this.memory = new BotMemory(playerCount, id);
 
@@ -65,6 +68,49 @@ class BotAdapter {
      */
     attachGame(game) {
         this.game = game;
+    }
+
+    /**
+     * Called when a bot replaces a disconnected player mid-game.
+     * Evaluates the current game state and synthesizes the correct event
+     * to trigger this bot into action if it's currently its turn.
+     */
+    resumeTurn() {
+        if (!this.game) return;
+        const ts = this.game.turnState;
+
+        if (ts.receiverIndex === this.id) {
+            if (ts.phase === PHASES.WAITING_FOR_REQUEST) {
+                this.send("game_update", {
+                    yourHand: this.hand,
+                    turn: { sender: ts.senderIndex, receiver: ts.receiverIndex, phase: ts.phase }
+                });
+            } else if (ts.phase === PHASES.WAITING_FOR_FIRST_DECISION) {
+                this.send("decision_needed", { offerNumber: 1 });
+            } else if (ts.phase === PHASES.WAITING_FOR_SECOND_DECISION) {
+                this.send("decision_needed", { offerNumber: 2 });
+            }
+        } else if (ts.senderIndex === this.id) {
+            if (ts.phase === PHASES.WAITING_FOR_FIRST_OFFER) {
+                this.send("card_requested", { requestedRank: ts.requestedRank });
+            } else if (ts.phase === PHASES.WAITING_FOR_SECOND_OFFER) {
+                this.send("second_offer_needed", {});
+            } else if (ts.phase === PHASES.WAITING_FOR_THIRD_OFFER) {
+                this.send("third_offer_needed", {});
+            }
+        }
+    }
+
+    /** Helper to manage the single active thinking timeout */
+    _setTimeout(fn, delay) {
+        if (this.timeoutId) clearTimeout(this.timeoutId);
+        this.timeoutId = setTimeout(fn, delay);
+    }
+
+    /** Cleanly destroys this bot by aborting any pending background action */
+    destroy() {
+        if (this.timeoutId) clearTimeout(this.timeoutId);
+        this.game = null;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -172,7 +218,7 @@ class BotAdapter {
         // If bot is the receiver and it's time to request, do so.
         if (receiver === this.id && phase === "waiting_for_request") {
             this._offerCount = 0;
-            setTimeout(() => this._doRequest(), 1500);
+            this._setTimeout(() => this._doRequest(), 1500);
         }
     }
 
@@ -186,7 +232,7 @@ class BotAdapter {
         this.memory.recordRequest(receiverId, requestedRank);
 
         this._offerCount = 1;
-        setTimeout(() => this._doOffer(/* isSecondOffer */ false), 1500);
+        this._setTimeout(() => this._doOffer(/* isSecondOffer */ false), 1500);
     }
 
     /** Receiver (bot) must decide: accept or reject. */
@@ -194,7 +240,7 @@ class BotAdapter {
         const offerNumber = payload.offerNumber; // 1 or 2
         const senderId = this._currentSenderId();
 
-        setTimeout(() => {
+        this._setTimeout(() => {
             if (offerNumber === 1) {
                 let decision;
                 if (this.difficulty === 'hard') {
@@ -227,7 +273,7 @@ class BotAdapter {
     _onSecondOfferNeeded(payload) {
         if (payload.yourHand) this.hand = payload.yourHand;
         this._offerCount = 2;
-        setTimeout(() => this._doOffer(/* isSecondOffer */ true), 1500);
+        this._setTimeout(() => this._doOffer(/* isSecondOffer */ true), 1500);
     }
 
     /** Sender (bot) must offer a mandatory third card. */
@@ -235,7 +281,7 @@ class BotAdapter {
         if (payload.yourHand) this.hand = payload.yourHand;
         this._offerCount = 3;
         // On the 3rd forced offer just pick a card (still use offer logic but it's mandatory)
-        setTimeout(() => this._doOffer(/* isSecondOffer */ true), 1500);
+        this._setTimeout(() => this._doOffer(/* isSecondOffer */ true), 1500);
     }
 
     // ─── Action helpers ───────────────────────────────────────────────────────
@@ -260,7 +306,7 @@ class BotAdapter {
                 this._currentReceiverId(),
                 this.game.turnState.requestedRank,
                 this.bluffChance,
-                isSecondOffer
+                this._offerCount || 1
             );
         } else {
             cardIndex = decideOffer(
