@@ -46,7 +46,7 @@ Receiver  →  decides: Accept / Reject / Force 3rd card
 
 ## ✨ Key Features
 
-- **Cross-Platform Clients**: Play seamlessly from the React Native Mobile App (`client-mobile`), the Unity 3D client (`client-unity`), or the developer CLI (`client`).
+- **Cross-Platform Clients**: Play seamlessly from the React Native Mobile App (`client-mobile`), or the developer CLI (`client`).
 - **Dynamic Rooms**: Create private rooms with custom 5-letter invite codes.
 - **Advanced AI Bots**:
   - Automatically fill empty room slots with bots (ranging from `medium` to `hard` difficulty).
@@ -69,8 +69,7 @@ JokerTrap/
 │   │   └── network/           # socketServer.js (Rooms, disconnect handovers)
 │   └── tests/                 # 75+ Jest unit & socket integration tests
 ├── client-mobile/             # Expo React Native App (iOS/Android)
-├── client-unity/              # Unity C# Client implementation
-└── client/                    # CLI testing client
+└── client-cli/                # CLI testing client
 ```
 
 ---
@@ -81,7 +80,6 @@ JokerTrap/
 - Node.js v18+
 - npm
 - (Optional) Expo CLI for Mobile app
-- (Optional) Unity for 3D client
 
 ### Run the Server locally
 ```bash
