@@ -333,6 +333,25 @@ class BotAdapter {
     _currentReceiverId() {
         return this.game?.turnState?.receiverIndex ?? -1;
     }
+
+    toJSON() {
+        return {
+            id: this.id,
+            difficulty: this.difficulty,
+            bluffChance: this.bluffChance,
+            hand: this.hand,
+            _offerCount: this._offerCount,
+            memory: this.memory.toJSON()
+        };
+    }
+
+    static fromJSON(data, playerCount = 4) {
+        const bot = new BotAdapter(data.id, data.difficulty, data.bluffChance, playerCount);
+        bot.hand = data.hand;
+        bot._offerCount = data._offerCount;
+        bot.memory = BotMemory.fromJSON(data.memory);
+        return bot;
+    }
 }
 
 module.exports = BotAdapter;

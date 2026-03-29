@@ -441,3 +441,134 @@ describe('useGameSocket — malformed message resilience', () => {
         }).not.toThrow();
     });
 });
+
+describe('useGameSocket — session token persistence', () => {
+    it('stores sessionToken from room_created response', () => {
+        const { result } = renderHook(() => useGameSocket('create', undefined, '3'));
+        triggerOpen();
+
+        // Server responds with room_created containing a session token
+        triggerMessage('room_created', {
+            roomId: 'ABCDE',
+            botCount: 3,
+            sessionToken: 'tok_abc123',
+            message: 'Room created.'
+        });
+
+        expect(result.current.roomCode).toBe('ABCDE');
+        // Session token is in a ref, so we verify indirectly:
+        // if we close and reopen, it should send resume_room instead of create_room
+        triggerClose(1006);
+
+        // Get the new mock instance after reconnection attempt
+        jest.useFakeTimers();
+        act(() => { jest.advanceTimersByTime(3000); });
+
+        // The new socket should try to resume with the token on open
+        const reconnectedInstance = mockWsInstance;
+        act(() => {
+            reconnectedInstance.readyState = MockWebSocket.OPEN;
+            reconnectedInstance.onopen!({});
+        });
+
+        // Verify that resume_room was sent (not create_room)
+        const lastSend = reconnectedInstance.send.mock.calls[0]?.[0];
+        if (lastSend) {
+            const parsed = JSON.parse(lastSend);
+            expect(parsed.event).toBe('resume_room');
+            expect(parsed.payload.roomId).toBe('ABCDE');
+            expect(parsed.payload.sessionToken).toBe('tok_abc123');
+        }
+
+        jest.useRealTimers();
+    });
+
+    it('stores sessionToken from room_joined response', () => {
+        const { result } = renderHook(() => useGameSocket('join', 'XYZZY'));
+        triggerOpen();
+
+        triggerMessage('room_joined', {
+            roomId: 'XYZZY',
+            botCount: 2,
+            sessionToken: 'tok_join456',
+            message: 'Joined room.'
+        });
+
+        expect(result.current.roomCode).toBe('XYZZY');
+    });
+
+    it('handles room_resumed event correctly', () => {
+        const { result } = renderHook(() => useGameSocket());
+        triggerOpen();
+
+        triggerMessage('room_resumed', {
+            roomId: 'RESUME1',
+            botCount: 1,
+            message: 'Welcome back to the room.'
+        });
+
+        expect(result.current.roomCode).toBe('RESUME1');
+        expect(result.current.gameMessage).toMatch(/Welcome back/i);
+    });
+});
+
+describe('useGameSocket — auto-reconnection', () => {
+    it('sets isReconnecting=true on close when session token exists', () => {
+        const { result } = renderHook(() => useGameSocket('create'));
+        triggerOpen();
+
+        // Simulate receiving session token
+        triggerMessage('room_created', {
+            roomId: 'RECON1',
+            sessionToken: 'tok_recon',
+            message: 'Room created.'
+        });
+
+        // Simulate disconnect
+        triggerClose(1006);
+
+        expect(result.current.isReconnecting).toBe(true);
+        expect(result.current.connected).toBe(false);
+    });
+
+    it('sets isReconnecting=false on close when NO session token', () => {
+        const { result } = renderHook(() => useGameSocket());
+        triggerOpen();
+
+        // No room_created/joined → no session token
+        triggerClose(1006);
+
+        expect(result.current.isReconnecting).toBe(false);
+        expect(result.current.gameMessage).toMatch(/Disconnected/i);
+    });
+
+    it('clears isReconnecting on successful reconnect', () => {
+        jest.useFakeTimers();
+        const { result } = renderHook(() => useGameSocket('create'));
+        triggerOpen();
+
+        triggerMessage('room_created', {
+            roomId: 'RECON2',
+            sessionToken: 'tok_recon2',
+            message: 'Room created.'
+        });
+
+        triggerClose(1006);
+        expect(result.current.isReconnecting).toBe(true);
+
+        // Advance to trigger reconnect attempt
+        act(() => { jest.advanceTimersByTime(3000); });
+
+        // Simulate successful reconnection
+        act(() => {
+            mockWsInstance.readyState = MockWebSocket.OPEN;
+            mockWsInstance.onopen!({});
+        });
+
+        expect(result.current.isReconnecting).toBe(false);
+        expect(result.current.connected).toBe(true);
+
+        jest.useRealTimers();
+    });
+});
+

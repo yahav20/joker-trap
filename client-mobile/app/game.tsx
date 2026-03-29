@@ -41,7 +41,7 @@ export default function App() {
 
     const {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
-        currentTurn, opponents, myPlayerId, sendAction, connected, roomCode, reconnect
+        currentTurn, opponents, myPlayerId, sendAction, connected, roomCode, reconnect, isReconnecting
     } = useGameSocket(params.action, params.roomId, params.bots);
 
     /**
@@ -211,7 +211,7 @@ export default function App() {
             />
 
             {!connected && (
-                <DisconnectedOverlay onReconnect={reconnect} />
+                <DisconnectedOverlay onReturnHome={() => router.replace('/')} isReconnecting={isReconnecting} />
             )}
 
         </ImageBackground>

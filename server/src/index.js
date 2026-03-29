@@ -9,6 +9,9 @@
  *               Set to 3 to play solo against three bots.
  */
 
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../server/.env') });
+
 const { startServer } = require("./network/socketServer");
 const { PORT } = require("./config/constant");
 

@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
  * - 10.0.2.2 maps to the host machine's loopback interface from an Android emulator.
  * - Override via the EXPO_PUBLIC_WS_URL environment variable for physical devices or prod.
  */
-const SERVER_URL = "wss://joker-trap.onrender.com";
+const PROD_SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || "wss://joker-trap.onrender.com";
+const LOCAL_SERVER_URL = process.env.EXPO_PUBLIC_LOCAL_DEV_SERVER_URL || "ws://10.100.102.17:8080";
 
 /**
  * A single playing card.
@@ -114,15 +115,16 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
     /** Lightweight list of opponents — only hand count is known, not the actual cards. */
     const [opponents, setOpponents] = useState<PlayerInfo[]>([]);
 
-    /**
-     * We keep a ref that mirrors `currentTurn` so that the `onmessage` closure
-     * (created once via useCallback) can always read the latest turn value
-     * without needing to be recreated on every state change.
-     */
     const currentTurnRef = useRef(currentTurn);
     useEffect(() => {
         currentTurnRef.current = currentTurn;
     }, [currentTurn]);
+
+    /** Session persistence for server crashes or network drops */
+    const sessionTokenRef = useRef<string | null>(null);
+    const roomIdRef = useRef<string | null>(roomIdParam || null);
+    const reconnectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const [isReconnecting, setIsReconnecting] = useState(false);
 
     /** Persistent ref to the WebSocket instance — avoids re-renders on WS changes. */
     const ws = useRef<WebSocket | null>(null);
@@ -139,8 +141,12 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
      * Wrapped in `useCallback` so that the reference is stable across renders,
      * which prevents the mount `useEffect` below from running more than once.
      */
-    const connect = useCallback(() => {
-        const HOST = process.env.EXPO_PUBLIC_WS_URL || SERVER_URL;
+    const connect = useCallback((isAttemptingReconnect = false) => {
+        if (!isAttemptingReconnect) {
+            setIsReconnecting(false);
+        }
+
+        const HOST = process.env.EXPO_PUBLIC_USE_LOCAL === 'true' ? LOCAL_SERVER_URL : PROD_SERVER_URL;
         console.log('Connecting to:', HOST);
         setGameMessage('Connecting to server...');
 
@@ -149,10 +155,21 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
         /** Called once the socket handshake completes. */
         ws.current.onopen = () => {
             setConnected(true);
+            setIsReconnecting(false);
+            if (reconnectTimerRef.current) {
+                clearInterval(reconnectTimerRef.current);
+                reconnectTimerRef.current = null;
+            }
+
             setGameMessage('Connected. Joining room...');
 
-            // Send the initial room request
-            if (action === 'create') {
+            // Send the initial room request or resume
+            if (sessionTokenRef.current && roomIdRef.current) {
+                ws.current?.send(JSON.stringify({ 
+                    event: 'resume_room', 
+                    payload: { roomId: roomIdRef.current, sessionToken: sessionTokenRef.current } 
+                }));
+            } else if (action === 'create') {
                 ws.current?.send(JSON.stringify({ event: 'create_room', payload: { botCount: parseInt(botsParam || '0', 10) } }));
             } else if (action === 'join' && roomIdParam) {
                 ws.current?.send(JSON.stringify({ event: 'join_room', payload: { roomId: roomIdParam } }));
@@ -183,6 +200,8 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                      */
                     case 'room_created':
                         setRoomCode(payload.roomId);
+                        roomIdRef.current = payload.roomId;
+                        sessionTokenRef.current = payload.sessionToken;
                         setGameMessage(payload.message || `Room Code: ${payload.roomId}`);
                         break;
 
@@ -192,7 +211,15 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                      */
                     case 'room_joined':
                         setRoomCode(payload.roomId);
+                        roomIdRef.current = payload.roomId;
+                        sessionTokenRef.current = payload.sessionToken;
                         setGameMessage(payload.message || `Joined Room: ${payload.roomId}`);
+                        break;
+
+                    case 'room_resumed':
+                        setRoomCode(payload.roomId);
+                        roomIdRef.current = payload.roomId;
+                        setGameMessage(payload.message || `Resumed Room: ${payload.roomId}`);
                         break;
 
                     /**
@@ -376,8 +403,24 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
          */
         ws.current.onclose = (e) => {
             setConnected(false);
-            setGameMessage('Disconnected from server.');
             console.log('WS Closed:', e.code, e.reason);
+
+            if (sessionTokenRef.current) {
+                setIsReconnecting(true);
+                setGameMessage('Disconnected. Reconnecting...');
+                
+                // Retry every 3 seconds if not already trying
+                if (!reconnectTimerRef.current) {
+                    reconnectTimerRef.current = setInterval(() => {
+                        if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
+                            connect(true);
+                        }
+                    }, 3000);
+                }
+            } else {
+                setGameMessage('Disconnected from server.');
+                setIsReconnecting(false);
+            }
         };
 
         /**
@@ -421,6 +464,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
     return {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
         currentTurn, opponents, myPlayerId, sendAction, connected, roomCode,
-        reconnect: connect
+        isReconnecting,
+        reconnect: () => connect(false)
     };
 };

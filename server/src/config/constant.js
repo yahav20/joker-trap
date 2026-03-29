@@ -27,6 +27,9 @@ const PHASES = {
 };
 
 /** WebSocket port */
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 
-module.exports = { PLAYER_COUNT, RANKS, SUITS, PHASES, PORT };
+/** Redis connection URL */
+const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+
+module.exports = { PLAYER_COUNT, RANKS, SUITS, PHASES, PORT, REDIS_URL };

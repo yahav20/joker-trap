@@ -270,6 +270,34 @@ class BotMemory {
             this.jokerSuspicion.set(id, uniform);
         }
     }
+
+    toJSON() {
+        return {
+            playerCount: this.playerCount,
+            botId: this.botId,
+            lastRequestedRank: Array.from(this.lastRequestedRank.entries()),
+            receiverDecisionHistory: Array.from(this.receiverDecisionHistory.entries()),
+            eventLog: this.eventLog,
+            jokerSuspicion: Array.from(this.jokerSuspicion.entries()),
+            rankRequests: Array.from(this.rankRequests.entries()),
+            confirmedJokerHolder: this.confirmedJokerHolder,
+            knownRanks: Array.from(this.knownRanks.entries()).map(([k, v]) => [k, Array.from(v)]),
+            round: this.round
+        };
+    }
+
+    static fromJSON(data) {
+        const memory = new BotMemory(data.playerCount, data.botId);
+        memory.lastRequestedRank = new Map(data.lastRequestedRank);
+        memory.receiverDecisionHistory = new Map(data.receiverDecisionHistory);
+        memory.eventLog = data.eventLog;
+        memory.jokerSuspicion = new Map(data.jokerSuspicion);
+        memory.rankRequests = new Map(data.rankRequests);
+        memory.confirmedJokerHolder = data.confirmedJokerHolder;
+        memory.knownRanks = new Map(data.knownRanks.map(([k, v]) => [k, new Set(v)]));
+        memory.round = data.round;
+        return memory;
+    }
 }
 
 module.exports = BotMemory;

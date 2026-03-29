@@ -335,6 +335,42 @@ class GameState {
     start(message = "Game started!") {
         this._broadcastGameState({ message });
     }
+
+    /**
+     * Re-sends the current game state to all player adapters.
+     * Used during session resumption — the adapters filter delivery to the target player.
+     */
+    sendStateUpdate(extras = {}) {
+        this._broadcastGameState(extras);
+    }
+
+    toJSON() {
+        return {
+            over: this.over,
+            turnState: this.turnState,
+            players: this.players.map(p => ({
+                id: p.id,
+                hand: p.hand,
+            }))
+        };
+    }
+
+    static fromJSON(data, adapterInstances) {
+        const state = new GameState(adapterInstances);
+        state.over = data.over;
+        state.turnState = data.turnState;
+        
+        state.players = adapterInstances.map(p => {
+            const savedPlayer = data.players.find(sp => sp.id === p.id);
+            return {
+                id: p.id,
+                send: p.send,
+                hand: savedPlayer ? savedPlayer.hand : []
+            };
+        });
+
+        return state;
+    }
 }
 
 module.exports = GameState;
