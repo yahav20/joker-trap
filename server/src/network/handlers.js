@@ -9,7 +9,7 @@ const logger = require("../utils/logger");
 const { PLAYER_COUNT } = require("../config/constant");
 const { generateRoomCode } = require("../utils/roomIdFormatter");
 const { acquireLock, releaseLock } = require("./locks");
-const { getRoomState, saveRoomState } = require("./roomStore");
+const { getRoomState, saveRoomState, deleteRoomState } = require("./roomStore");
 const { publishEvent, sendError } = require("./broadcast");
 const { executeActionOnRoom, checkRoomStart, checkRoomRestart } = require("./gameExecution");
 
@@ -242,8 +242,8 @@ async function handleDisconnect(ws) {
 
         const connectedHumans = roomState.clientsInfo.filter(c => c.connected).length;
         if (connectedHumans === 0) {
-            logger.info(`All players offline in room ${roomId}. State sleeping in RAM/Redis.`);
-            await saveRoomState(roomId, roomState, true);
+            logger.info(`All players offline in room ${roomId}. Deleting for cleanup.`);
+            await deleteRoomState(roomId);
             return;
         }
 
@@ -319,12 +319,10 @@ async function handleLeaveRoom(ws) {
         const otherConnectedHumans = roomState.clientsInfo.filter(c => c.connected && c.playerId !== ws.playerId).length;
         
         if (otherConnectedHumans === 0) {
-            logger.info(`Player explicitly left and is the last human in room ${roomId}. Closing game.`);
-            roomState.clientsInfo = [];
-            if (roomState.gameData) {
-                roomState.gameData.over = true;
-            }
+            logger.info(`Player explicitly left and is the last human in room ${roomId}. Deleting room.`);
             publishEvent(roomId, "game_over", { loserId: ws.playerId, winnerIds: [] });
+            await deleteRoomState(roomId);
+            ws.roomId = null;
         } else {
             logger.info(`Player ${ws.playerId} explicitly left. Replacing with Bot immediately.`);
             roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== ws.playerId);
@@ -342,8 +340,8 @@ async function handleLeaveRoom(ws) {
             broadcastPlayersUpdate(roomId, roomState);
             publishEvent(roomId, "game_update", { message: `Player explicitly left. A bot took over.` });
             await executeActionOnRoom(roomId, ws.playerId, "RESUME_BOT", {}, false);
+            await saveRoomState(roomId, roomState, true);
         }
-        await saveRoomState(roomId, roomState, true);
         
         // Remove room binding so handleDisconnect won't process them again if they close WS later
         ws.roomId = null; 

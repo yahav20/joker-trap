@@ -16,6 +16,7 @@ import { DisconnectedOverlay } from '../components/joker-trap/DisconnectedOverla
 import { RequestModal } from '../components/joker-trap/RequestModal';
 import { Lobby } from '../components/joker-trap/Lobby';
 import { JokerLaughOverlay } from '../components/joker-trap/JokerLaughOverlay';
+import { LoadingOverlay } from '../components/joker-trap/LoadingOverlay';
 import { AVATARS } from '../constants/avatars';
 import { Image } from 'react-native';
 
@@ -79,6 +80,10 @@ export default function App() {
     const topAvatar = playersData.find(p => p.id === topOppId)?.avatar;
     const rightAvatar = playersData.find(p => p.id === rightOppId)?.avatar;
     const myAvatar = playersData.find(p => p.id === myPlayerId)?.avatar || params.avatar;
+
+    const isMyTurn = (currentTurn.sender === myPlayerId || currentTurn.receiver === myPlayerId) && currentTurn.phase !== 'lobby';
+    const showLoading = !connected && !isReconnecting;
+    const loadingMessage = "מתחבר לשרת...";
 
     // Build face-down hand arrays for each opponent zone.
     const leftHand = Array(leftObj ? leftObj.handCount : 4).fill(null);
@@ -268,9 +273,10 @@ export default function App() {
                 onSelectRank={(rank) => sendAction('request_card', { rank })}
             />
 
-            {!connected && (
-                <DisconnectedOverlay onReturnHome={() => router.replace('/')} isReconnecting={isReconnecting} />
-            )}
+            <LoadingOverlay 
+                visible={showLoading} 
+                message={loadingMessage} 
+            />
 
             {/* Joker received — evil laugh + animation */}
             <JokerLaughOverlay visible={receivedJoker} />
