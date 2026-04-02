@@ -444,6 +444,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
             // Clean up the socket when the game screen is unmounted to avoid memory leaks.
             ws.current?.close();
             if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            if (reconnectTimerRef.current) clearInterval(reconnectTimerRef.current);
         };
     }, [connect]);
 

@@ -114,28 +114,30 @@ describe('DisconnectedOverlay component', () => {
     const { DisconnectedOverlay } = require('../components/joker-trap/DisconnectedOverlay');
 
     it('renders OFFLINE message', () => {
-        const { getByText } = render(<DisconnectedOverlay onReconnect={jest.fn()} />);
+        const { getByText } = render(<DisconnectedOverlay onReturnHome={jest.fn()} />);
         expect(getByText('OFFLINE')).toBeTruthy();
     });
 
-    it('renders the Reconnect Now button', () => {
-        const { getByText } = render(<DisconnectedOverlay onReconnect={jest.fn()} />);
-        expect(getByText('Reconnect Now')).toBeTruthy();
+    it('renders the Return to Home button', () => {
+        const { getByText } = render(<DisconnectedOverlay onReturnHome={jest.fn()} />);
+        expect(getByText('Return to Home')).toBeTruthy();
     });
 
-    it('calls onReconnect when Reconnect Now is tapped', () => {
-        const onReconnect = jest.fn();
-        const { getByText } = render(<DisconnectedOverlay onReconnect={onReconnect} />);
-        fireEvent.press(getByText('Reconnect Now'));
-        expect(onReconnect).toHaveBeenCalledTimes(1);
+    it('calls onReturnHome when Return to Home is tapped', () => {
+        const onReturnHome = jest.fn();
+        const { getByText } = render(<DisconnectedOverlay onReturnHome={onReturnHome} />);
+        fireEvent.press(getByText('Return to Home'));
+        expect(onReturnHome).toHaveBeenCalledTimes(1);
     });
 
-    it('calls onReconnect only once per tap (no double-fire)', () => {
-        const onReconnect = jest.fn();
-        const { getByText } = render(<DisconnectedOverlay onReconnect={onReconnect} />);
-        fireEvent.press(getByText('Reconnect Now'));
-        fireEvent.press(getByText('Reconnect Now'));
-        expect(onReconnect).toHaveBeenCalledTimes(2);
+    it('shows RECONNECTING message when isReconnecting=true', () => {
+        const { getByText } = render(<DisconnectedOverlay onReturnHome={jest.fn()} isReconnecting />);
+        expect(getByText('RECONNECTING')).toBeTruthy();
+    });
+
+    it('shows "Cancel & Leave" button when isReconnecting=true', () => {
+        const { getByText } = render(<DisconnectedOverlay onReturnHome={jest.fn()} isReconnecting />);
+        expect(getByText('Cancel & Leave')).toBeTruthy();
     });
 });
 

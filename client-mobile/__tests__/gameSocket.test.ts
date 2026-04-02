@@ -444,6 +444,7 @@ describe('useGameSocket — malformed message resilience', () => {
 
 describe('useGameSocket — session token persistence', () => {
     it('stores sessionToken from room_created response', () => {
+        jest.useFakeTimers();
         const { result } = renderHook(() => useGameSocket('create', undefined, '3'));
         triggerOpen();
 
@@ -460,8 +461,7 @@ describe('useGameSocket — session token persistence', () => {
         // if we close and reopen, it should send resume_room instead of create_room
         triggerClose(1006);
 
-        // Get the new mock instance after reconnection attempt
-        jest.useFakeTimers();
+        // Advance to trigger reconnection attempt
         act(() => { jest.advanceTimersByTime(3000); });
 
         // The new socket should try to resume with the token on open
@@ -473,12 +473,11 @@ describe('useGameSocket — session token persistence', () => {
 
         // Verify that resume_room was sent (not create_room)
         const lastSend = reconnectedInstance.send.mock.calls[0]?.[0];
-        if (lastSend) {
-            const parsed = JSON.parse(lastSend);
-            expect(parsed.event).toBe('resume_room');
-            expect(parsed.payload.roomId).toBe('ABCDE');
-            expect(parsed.payload.sessionToken).toBe('tok_abc123');
-        }
+        expect(lastSend).toBeDefined();
+        const parsed = JSON.parse(lastSend);
+        expect(parsed.event).toBe('resume_room');
+        expect(parsed.payload.roomId).toBe('ABCDE');
+        expect(parsed.payload.sessionToken).toBe('tok_abc123');
 
         jest.useRealTimers();
     });

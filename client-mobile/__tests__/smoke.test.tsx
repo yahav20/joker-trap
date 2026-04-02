@@ -77,12 +77,12 @@ describe('Smoke Tests', () => {
     /**
      * DisconnectedOverlay renders the reconnect button.
      */
-    it('DisconnectedOverlay renders and calls onReconnect', () => {
+    it('DisconnectedOverlay renders and calls onReturnHome', () => {
         const { DisconnectedOverlay } = require('../components/joker-trap/DisconnectedOverlay');
-        const onReconnect = jest.fn();
-        const { getByText } = render(<DisconnectedOverlay onReconnect={onReconnect} />);
-        fireEvent.press(getByText('Reconnect Now'));
-        expect(onReconnect).toHaveBeenCalledTimes(1);
+        const onReturnHome = jest.fn();
+        const { getByText } = render(<DisconnectedOverlay onReturnHome={onReturnHome} />);
+        fireEvent.press(getByText('Return to Home'));
+        expect(onReturnHome).toHaveBeenCalledTimes(1);
     });
 
     /**
