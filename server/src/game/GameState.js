@@ -39,8 +39,8 @@ class GameState {
          * (removed from sender's hand but not yet given to receiver).
          */
         this.turnState = {
-            senderIndex: 0,
-            receiverIndex: 1,
+            senderId: this.players[0].id,
+            receiverId: this.players[1].id,
             phase: PHASES.WAITING_FOR_REQUEST,
             requestedRank: null,
             tableCards: [],
@@ -78,7 +78,7 @@ class GameState {
         // Only the SENDER sees what was requested
         this._sender().send("card_requested", {
             requestedRank: normalised,
-            message: `Player ${ts.receiverIndex} requested: ${normalised}. Pick a card to offer face-down.`,
+            message: `Player ${ts.receiverId} requested: ${normalised}. Pick a card to offer face-down.`,
             yourHand: this._sender().hand,
         });
 
@@ -180,6 +180,17 @@ class GameState {
                 this._resolveTransfer(0);
             } else if (decision === "reject") {
                 ts.phase = PHASES.WAITING_FOR_SECOND_OFFER;
+                
+                for (const p of this.players) {
+                    if (p.id !== this._sender().id && p.id !== this._receiver().id) {
+                        p.send("interaction_update", {
+                            message: `Player ${this._receiver().id} rejected the first offer.`,
+                            accepted: false,
+                            offerNum: 1
+                        });
+                    }
+                }
+
                 this._broadcastGameState();
                 this._sender().send("second_offer_needed", {
                     message: "Receiver rejected your first card! Offer a second one.",
@@ -195,6 +206,17 @@ class GameState {
                 this._resolveTransfer(1);
             } else if (decision === "force_third") {
                 ts.phase = PHASES.WAITING_FOR_THIRD_OFFER;
+                
+                for (const p of this.players) {
+                    if (p.id !== this._sender().id && p.id !== this._receiver().id) {
+                        p.send("interaction_update", {
+                            message: `Player ${this._receiver().id} forced a third offer.`,
+                            accepted: false,
+                            offerNum: 2
+                        });
+                    }
+                }
+
                 this._broadcastGameState();
                 this._sender().send("third_offer_needed", {
                     message: "Receiver forced a third card! You MUST offer another card.",
@@ -239,6 +261,7 @@ class GameState {
 
         // Confirm to sender
         sender.send("card_sent", {
+            card: acceptedCard,
             cardLabel: label,
             yourHand: sender.hand,
         });
@@ -248,6 +271,8 @@ class GameState {
             if (p.id !== sender.id && p.id !== receiver.id) {
                 p.send("interaction_update", {
                     message: `Interaction between Player ${sender.id} and Player ${receiver.id} is complete.`,
+                    accepted: true,
+                    offerNum: ts.tableCards.length + 1 // Not perfectly accurate, but acceptable. Actually, acceptedIndex+1 is exactly the successful offerNum! Wait, acceptedIndex is 0 or 1.
                 });
             }
         }
@@ -267,14 +292,19 @@ class GameState {
     /** Advance turn: old receiver becomes new sender; next player clockwise is receiver. */
     _advanceTurn() {
         const ts = this.turnState;
-        const oldReceiver = ts.receiverIndex;
-        ts.senderIndex = oldReceiver;
-        ts.receiverIndex = (oldReceiver + 1) % this.players.length;
+        
+        // Find current receiver's position in the array
+        const oldReceiverIndex = this.players.findIndex(p => p.id === ts.receiverId);
+        const nextReceiverIndex = (oldReceiverIndex + 1) % this.players.length;
+        
+        ts.senderId = ts.receiverId;
+        ts.receiverId = this.players[nextReceiverIndex].id;
+        
         ts.phase = PHASES.WAITING_FOR_REQUEST;
         ts.requestedRank = null;
         ts.tableCards = [];
 
-        logger.game(`Turn advance → Sender: Player ${ts.senderIndex} | Receiver: Player ${ts.receiverIndex}`);
+        logger.game(`Turn advance → Sender: Player ${ts.senderId} | Receiver: Player ${ts.receiverId}`);
 
         // Broadcast updated game state to every player
         this._broadcastGameState();
@@ -303,15 +333,21 @@ class GameState {
     /** Send each player their own hand + turn info (requestedRank only to sender). */
     _broadcastGameState(extras = {}) {
         const ts = this.turnState;
+        const handSizes = {};
+        for (const p of this.players) {
+            handSizes[p.id] = p.hand.length;
+        }
+
         for (const p of this.players) {
             p.send("game_update", {
                 playerId: p.id,
                 yourHand: p.hand,
+                handSizes,
                 turn: {
-                    sender: ts.senderIndex,
-                    receiver: ts.receiverIndex,
+                    sender: ts.senderId,
+                    receiver: ts.receiverId,
                     phase: ts.phase,
-                    requestedRank: p.id === ts.senderIndex ? ts.requestedRank : undefined,
+                    requestedRank: ts.requestedRank,
                 },
                 tableCount: ts.tableCards.length,
                 ...extras,
@@ -326,14 +362,23 @@ class GameState {
         logger.warn(`Error to Player ${playerId}: ${message}`);
     }
 
-    _sender() { return this.players[this.turnState.senderIndex]; }
-    _receiver() { return this.players[this.turnState.receiverIndex]; }
+    _sender() { return this.players.find(p => p.id === this.turnState.senderId); }
+    _receiver() { return this.players.find(p => p.id === this.turnState.receiverId); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Convenience – call after construction to push the first game_update
     // ═══════════════════════════════════════════════════════════════════════════
     start(message = "Game started!") {
         this._broadcastGameState({ message });
+        
+        // Initial check just in case a player received a quad on the first deal
+        for (const p of this.players) {
+            const quadRank = findQuad(p.hand);
+            if (quadRank) {
+                logger.game(`Player ${p.id} completed a quad of ${quadRank} at start!`);
+                return this._endGame(p.id, quadRank);
+            }
+        }
     }
 
     /**

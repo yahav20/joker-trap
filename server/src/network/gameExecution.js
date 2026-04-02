@@ -199,14 +199,15 @@ async function startGame(roomState) {
 
     // Initialise bots
     const botInstances = [];
-    const numBots = PLAYER_COUNT - roomState.clientsInfo.length;
+    const humanIds = new Set(roomState.clientsInfo.map(c => c.playerId));
 
-    for (let b = 0; b < numBots; b++) {
-        const botId = roomState.clientsInfo.length + b;
-        const diff = 'hard';
-        const bot = new BotAdapter(botId, diff, 0.25, PLAYER_COUNT, roomId);
-        bot.avatar = getRandomAvatar();
-        botInstances.push(bot);
+    for (let botId = 0; botId < PLAYER_COUNT; botId++) {
+        if (!humanIds.has(botId)) {
+            const diff = 'hard';
+            const bot = new BotAdapter(botId, diff, 0.25, PLAYER_COUNT, roomId);
+            bot.avatar = getRandomAvatar();
+            botInstances.push(bot);
+        }
     }
 
     const gameProxyForBots = createBotProxy(game, roomId);

@@ -89,18 +89,18 @@ class BotAdapter {
         if (!this.game) return;
         const ts = this.game.turnState;
 
-        if (ts.receiverIndex === this.id) {
+        if (ts.receiverId === this.id) {
             if (ts.phase === PHASES.WAITING_FOR_REQUEST) {
                 this.send("game_update", {
                     yourHand: this.hand,
-                    turn: { sender: ts.senderIndex, receiver: ts.receiverIndex, phase: ts.phase }
+                    turn: { sender: ts.senderId, receiver: ts.receiverId, phase: ts.phase }
                 });
             } else if (ts.phase === PHASES.WAITING_FOR_FIRST_DECISION) {
                 this.send("decision_needed", { offerNumber: 1 });
             } else if (ts.phase === PHASES.WAITING_FOR_SECOND_DECISION) {
                 this.send("decision_needed", { offerNumber: 2 });
             }
-        } else if (ts.senderIndex === this.id) {
+        } else if (ts.senderId === this.id) {
             if (ts.phase === PHASES.WAITING_FOR_FIRST_OFFER) {
                 this.send("card_requested", { requestedRank: ts.requestedRank });
             } else if (ts.phase === PHASES.WAITING_FOR_SECOND_OFFER) {
@@ -229,7 +229,8 @@ class BotAdapter {
                 this.memory.recordOffer(
                     this._currentSenderId(),
                     this._currentReceiverId(),
-                    /* accepted */ true
+                    payload.accepted !== undefined ? payload.accepted : true,
+                    payload.offerNum !== undefined ? payload.offerNum : this._offerCount
                 );
                 break;
 
@@ -377,11 +378,11 @@ class BotAdapter {
     // ─── Turn-state helpers ───────────────────────────────────────────────────
 
     _currentSenderId() {
-        return this.game?.turnState?.senderIndex ?? -1;
+        return this.game?.turnState?.senderId ?? -1;
     }
 
     _currentReceiverId() {
-        return this.game?.turnState?.receiverIndex ?? -1;
+        return this.game?.turnState?.receiverId ?? -1;
     }
 
     toJSON() {

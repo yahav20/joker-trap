@@ -45,7 +45,7 @@ export const useAvatar = () => {
             setAvatar(newAvatar);
             await AsyncStorage.setItem(STORAGE_KEY, newAvatar);
         } catch (e) {
-            console.error('Failed to persist avatar: ', e);
+            console.warn('Failed to persist avatar (using memory fallback): ', (e as Error).message);
         }
     };
 

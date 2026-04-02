@@ -106,8 +106,8 @@ describe("Phase transitions", () => {
         expect(game.turnState.tableCards).toHaveLength(0);
         expect(game.turnState.phase).toBe(PHASES.WAITING_FOR_REQUEST);
         // Turn advanced: new sender = 1, new receiver = 2
-        expect(game.turnState.senderIndex).toBe(1);
-        expect(game.turnState.receiverIndex).toBe(2);
+        expect(game.turnState.senderId).toBe(1);
+        expect(game.turnState.receiverId).toBe(2);
     });
 
     // ── 4. Reject → second offer phase ─────────────────────────────────────────
@@ -215,8 +215,8 @@ describe("Phase transitions", () => {
             { sender: 3, receiver: 0 },
         ];
         for (const expected of rounds) {
-            expect(game.turnState.senderIndex).toBe(expected.sender);
-            expect(game.turnState.receiverIndex).toBe(expected.receiver);
+            expect(game.turnState.senderId).toBe(expected.sender);
+            expect(game.turnState.receiverId).toBe(expected.receiver);
             game.handleRequestCard(expected.receiver, "J");
             game.handleOfferCard(expected.sender, 0);
             game.handleDecision(expected.receiver, "accept");
@@ -295,17 +295,16 @@ describe("Information hiding", () => {
         expect(lastMsg(players[2], "card_received")).toBeNull();
     });
 
-    test("receiver does not see requestedRank in their own game_update turn info", () => {
+    test("all players see requestedRank as null initially before request", () => {
         const { game, players } = makeGame();
         // Start broadcasts a game_update to all
         game.start();
         const p1update = lastMsg(players[1], "game_update");
         expect(p1update).not.toBeNull();
-        // requestedRank should be undefined for the receiver
-        expect(p1update.turn.requestedRank).toBeUndefined();
+        expect(p1update.turn.requestedRank).toBeNull();
     });
 
-    test("only sender sees requestedRank in game_update after request", () => {
+    test("sender sees requestedRank in game_update after request", () => {
         const { game, players } = makeGame();
         game.handleRequestCard(1, "K");
 

@@ -305,7 +305,7 @@ describe('useGameSocket — server event handling', () => {
         triggerMessage('decision_needed', { offerNumber: 1, message: '' });
         triggerMessage('card_received', {
             yourHand: [{ rank: 'K', suit: 'Hearts' }],
-            cardLabel: 'K',
+            card: { id: 'K_Hearts', rank: 'K', suit: 'Hearts' },
         });
         expect(result.current.tableCards).toHaveLength(0);
     });
@@ -316,7 +316,7 @@ describe('useGameSocket — server event handling', () => {
         triggerMessage('decision_needed', { offerNumber: 1, message: '' });
         triggerMessage('card_sent', {
             yourHand: [],
-            cardLabel: 'A',
+            card: { id: 'A_Spades', rank: 'A', suit: 'Spades' },
         });
         expect(result.current.tableCards).toHaveLength(0);
     });
@@ -392,21 +392,21 @@ describe('useGameSocket — lie detection in card_received', () => {
     it('shows "Received exactly" toast when rank matches', () => {
         jest.useFakeTimers();
         const { result } = setupWithRequest('K');
-        triggerMessage('card_received', { yourHand: [], cardLabel: 'K' });
+        triggerMessage('card_received', { yourHand: [], card: { id: 'K_Spades', rank: 'K', suit: 'Spades' } });
         expect(result.current.toastMessage).toMatch(/Received exactly/i);
     });
 
     it('shows "Opponent lied" toast when rank does NOT match', () => {
         jest.useFakeTimers();
         const { result } = setupWithRequest('K');
-        triggerMessage('card_received', { yourHand: [], cardLabel: 'Q' });
+        triggerMessage('card_received', { yourHand: [], card: { id: 'Q_Spades', rank: 'Q', suit: 'Spades' } });
         expect(result.current.toastMessage).toMatch(/Opponent lied/i);
     });
 
     it('does NOT flag Joker received when JOKER was requested (case invariant)', () => {
         jest.useFakeTimers();
         const { result } = setupWithRequest('JOKER');
-        triggerMessage('card_received', { yourHand: [], cardLabel: 'Joker' });
+        triggerMessage('card_received', { yourHand: [], card: { id: 'JOKER', rank: 'Joker', suit: 'Joker' } });
         expect(result.current.toastMessage).toMatch(/Received exactly/i);
     });
 });

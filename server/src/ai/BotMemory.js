@@ -82,6 +82,7 @@ class BotMemory {
      */
     recordRequest(receiverId, rank) {
         this.eventLog.push({ type: "request", receiverId, rank, round: this.round });
+        if (this.eventLog.length > 50) this.eventLog.shift();
         this.rankRequests.set(rank, (this.rankRequests.get(rank) ?? 0) + 1);
 
         const lastReq = this.lastRequestedRank.get(receiverId);
@@ -123,6 +124,7 @@ class BotMemory {
             offerNum,
             round: this.round,
         });
+        if (this.eventLog.length > 50) this.eventLog.shift();
 
         if (accepted) {
             // Record this decision
@@ -156,6 +158,7 @@ class BotMemory {
             isJoker: card.rank === "Joker",
             round: this.round,
         });
+        if (this.eventLog.length > 50) this.eventLog.shift();
 
         if (card.rank === "Joker") {
             this.confirmedJokerHolder = receiverId;

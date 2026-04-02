@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 
 /**
  * Fallback WebSocket URL for Android Emulator.
@@ -255,13 +256,12 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                         setMyHand(payload.yourHand);
                         setCurrentTurn(payload.turn);
 
-                        // TODO: The server currently does not broadcast opponent hand-sizes.
-                        // We derive them by assuming a fixed 4-player game and assign each
-                        // opponent a dummy count of 4 cards.  Replace with real data once
-                        // the server supports a `handSizes` field in the payload.
+                        // We use the handSizes mapping broadcasted by the server.
                         const activeOpponents = [];
                         for (let i = 1; i < 4; i++) {
-                            activeOpponents.push({ id: (payload.playerId + i) % 4, handCount: 4 });
+                            const oId = (payload.playerId + i) % 4;
+                            const count = payload.handSizes ? payload.handSizes[oId] : 4;
+                            activeOpponents.push({ id: oId, handCount: count });
                         }
                         setOpponents(activeOpponents);
 
@@ -331,13 +331,20 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                         setGameMessage(`Received: ${payload.cardLabel}`);
 
                         // Detect a lie by comparing what was received vs. what was asked for.
-                        const got = payload.cardLabel;
+                        // We use the exact card rank object rather than the string label.
+                        const gotCard = payload.card;
                         const wanted = currentTurnRef.current.requestedRank;
-                        const lied =
-                            got.toUpperCase() !== wanted &&
-                            !(got === "Joker" && wanted === "JOKER");
+                        let lied = false;
+                        
+                        if (gotCard && wanted) {
+                            lied = gotCard.rank.toUpperCase() !== wanted.toUpperCase() &&
+                                   gotCard.rank.toUpperCase() !== "JOKER";
+                        }
+                        
+                        // gotCard is null if this is a spectator receiving interaction_update, but card_received is only for receiver.
+                        const gotLabel = payload.cardLabel || (gotCard ? gotCard.rank : "?");
 
-                        if (got === 'Joker' || got?.toUpperCase() === 'JOKER') {
+                        if (gotCard && (gotCard.rank === 'Joker' || gotCard.rank?.toUpperCase() === 'JOKER')) {
                             // Local player just received the Joker — trigger overlay.
                             if (jokerTimerRef.current) clearTimeout(jokerTimerRef.current);
                             setReceivedJoker(true);
@@ -345,9 +352,9 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                         }
 
                         if (lied) {
-                            showToast(`Opponent lied! You asked for ${wanted} but got ${got}.`);
+                            showToast(`Opponent lied! You asked for ${wanted} but got ${gotLabel}.`);
                         } else {
-                            showToast(`Received exactly what you asked for: ${got}.`);
+                            showToast(`Received exactly what you asked for: ${gotLabel}.`);
                         }
                         break;
 
@@ -431,6 +438,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                 if (!reconnectTimerRef.current) {
                     reconnectTimerRef.current = setInterval(() => {
                         if (!ws.current || ws.current.readyState === WebSocket.CLOSED) {
+                            if (ws.current) ws.current.close();
                             connect(true);
                         }
                     }, 3000);
@@ -465,6 +473,21 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
             if (reconnectTimerRef.current) clearInterval(reconnectTimerRef.current);
             if (jokerTimerRef.current) clearTimeout(jokerTimerRef.current);
         };
+    }, [connect]);
+
+    /** AppState listener to handle background resuming */
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+            if (nextAppState === 'active') {
+                // Waking up from background: if disconnected and have session, manually trigger reconnect immediately
+                // instead of waiting for timer, which might have paused.
+                if (sessionTokenRef.current && (!ws.current || ws.current.readyState !== WebSocket.OPEN)) {
+                    if (ws.current) ws.current.close();
+                    connect(true);
+                }
+            }
+        });
+        return () => subscription.remove();
     }, [connect]);
 
     /**

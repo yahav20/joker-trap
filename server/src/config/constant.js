@@ -32,4 +32,11 @@ const PORT = process.env.PORT || 8080;
 /** Redis connection URL */
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
-module.exports = { PLAYER_COUNT, RANKS, SUITS, PHASES, PORT, REDIS_URL };
+const AVATAR_KEYS = [
+    'blackandwhite_joker', 'canday_joker', 'deadpool_joker', 'ghost_joker', 
+    'harli_joker', 'ice_joker', 'magic_joker', 'mechinacal_joker', 
+    'momie_joker', 'noar_joker', 'pirate_joker', 'purple_joker', 
+    'robot_joker', 'wizard_joker', 'wood_joker', 'zombie_joker'
+];
+
+module.exports = { PLAYER_COUNT, RANKS, SUITS, PHASES, PORT, REDIS_URL, AVATAR_KEYS };

@@ -80,6 +80,7 @@ function startBackgroundSaver() {
                     await redisClient.set(`room_state:${roomId}`, JSON.stringify(roomState), "EX", 3600);
                 } catch (e) {
                     logger.warn(`Background save failed for ${roomId}: ${e.message}`);
+                    dirtyRooms.add(roomId);
                 }
             }
         }

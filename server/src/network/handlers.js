@@ -3,22 +3,18 @@
  * WebSocket event handlers for room management and player lifecycle.
  */
 
+const crypto = require("crypto");
 const GameState = require("../game/GameState");
 const BotAdapter = require("../ai/BotAdapter");
 const logger = require("../utils/logger");
-const { PLAYER_COUNT } = require("../config/constant");
+const { PLAYER_COUNT, AVATAR_KEYS } = require("../config/constant");
 const { generateRoomCode } = require("../utils/roomIdFormatter");
 const { acquireLock, releaseLock } = require("./locks");
 const { getRoomState, saveRoomState, deleteRoomState } = require("./roomStore");
 const { publishEvent, sendError } = require("./broadcast");
 const { executeActionOnRoom, checkRoomStart, checkRoomRestart } = require("./gameExecution");
 
-const AVATAR_KEYS = [
-    'blackandwhite_joker', 'canday_joker', 'deadpool_joker', 'ghost_joker', 
-    'harli_joker', 'ice_joker', 'magic_joker', 'mechinacal_joker', 
-    'momie_joker', 'noar_joker', 'pirate_joker', 'purple_joker', 
-    'robot_joker', 'wizard_joker', 'wood_joker', 'zombie_joker'
-];
+
 function getRandomAvatar() {
     return AVATAR_KEYS[Math.floor(Math.random() * AVATAR_KEYS.length)];
 }
@@ -56,7 +52,7 @@ async function handleCreateRoom(ws, payload) {
     if (isNaN(botCount) || botCount < 0 || botCount > 3) botCount = 0;
 
     const roomId = generateRoomCode(5);
-    const sessionToken = Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2);
+    const sessionToken = crypto.randomBytes(16).toString('hex');
 
     const roomState = {
         id: roomId,
@@ -108,7 +104,7 @@ async function handleJoinRoom(ws, payload) {
         }
 
         const newPlayerId = roomState.clientsInfo.length;
-        const sessionToken = Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2);
+        const sessionToken = crypto.randomBytes(16).toString('hex');
 
         ws.roomId = roomId;
         ws.playerId = newPlayerId;
@@ -229,7 +225,11 @@ async function handleDisconnect(ws) {
     const roomId = ws.roomId;
 
     const locked = await acquireLock(roomId);
-    if (!locked) return;
+    if (!locked) {
+        // Retry disconnect to avoid skipping it during a lock
+        setTimeout(() => handleDisconnect(ws), 1000);
+        return;
+    }
 
     try {
         const roomState = await getRoomState(roomId);
@@ -241,11 +241,6 @@ async function handleDisconnect(ws) {
         clientInfo.connected = false;
 
         const connectedHumans = roomState.clientsInfo.filter(c => c.connected).length;
-        if (connectedHumans === 0) {
-            logger.info(`All players offline in room ${roomId}. Deleting for cleanup.`);
-            await deleteRoomState(roomId);
-            return;
-        }
 
         if (roomState.gameData && !roomState.gameData.over) {
             publishEvent(roomId, "game_update", { message: `Player ${ws.playerId} disconnected. Waiting 30s to reconnect...` });
@@ -257,6 +252,12 @@ async function handleDisconnect(ws) {
 
             botTimeouts.set(timeoutKey, timeout);
         } else {
+            if (connectedHumans === 0) {
+                logger.info(`All players offline in room ${roomId} lobby. Deleting for cleanup.`);
+                await deleteRoomState(roomId);
+                return;
+            }
+
             roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== ws.playerId);
             roomState.botCount++;
             await checkRoomRestart(roomState);
@@ -282,12 +283,23 @@ async function replacePlayerWithBot(roomId, playerId) {
         roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== playerId);
         roomState.botCount++;
 
+        if (roomState.clientsInfo.length === 0) {
+            logger.info(`No humans left in room ${roomId} after player timeout. Deleting room.`);
+            await deleteRoomState(roomId);
+            BotAdapter.abortAll(roomId);
+            return;
+        }
+
         const bot = new BotAdapter(playerId, 'hard', 0.25, PLAYER_COUNT, roomId);
         bot.avatar = getRandomAvatar();
         const savedPlayer = roomState.gameData.players.find(p => p.id === playerId);
         if (savedPlayer) bot.hand = savedPlayer.hand;
 
         roomState.botsConfig.push(bot.toJSON());
+        // Clean up immediately because `executeActionOnRoom` with `RESUME_BOT` 
+        // will instantiate a fresh BotAdapter properly bound to activeBots.
+        BotAdapter.abortAll(roomId); 
+        
         await saveRoomState(roomId, roomState, true);
 
         broadcastPlayersUpdate(roomId, roomState);
@@ -303,6 +315,7 @@ async function replacePlayerWithBot(roomId, playerId) {
 async function handleLeaveRoom(ws) {
     if (!ws.roomId) return;
     const roomId = ws.roomId;
+    ws.leaving = true;
 
     const locked = await acquireLock(roomId);
     if (!locked) return;
@@ -336,6 +349,7 @@ async function handleLeaveRoom(ws) {
             }
 
             roomState.botsConfig.push(bot.toJSON());
+            BotAdapter.abortAll(roomId); 
             
             broadcastPlayersUpdate(roomId, roomState);
             publishEvent(roomId, "game_update", { message: `Player explicitly left. A bot took over.` });

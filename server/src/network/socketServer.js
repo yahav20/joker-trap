@@ -27,12 +27,35 @@ let wss = null;
  * Creates and starts the WebSocket server.
  */
 function startServer(port = PORT) {
-    wss = new WebSocket.Server({ port, host: '0.0.0.0' });
+    wss = new WebSocket.Server({ 
+        port, 
+        host: '0.0.0.0',
+        maxPayload: 500 * 1024, // 500KB limit
+        clientTracking: true
+    });
     logger.info(`Joker Trap WebSocket Server running on ws://0.0.0.0:${port}`);
 
     startBackgroundSaver();
 
+    // Ping every 30s to keep NAT connections alive
+    const pingInterval = setInterval(() => {
+        wss.clients.forEach(ws => {
+            if (ws.alive === false) { 
+                return ws.terminate(); 
+            }
+            ws.alive = false;
+            ws.ping();
+        });
+    }, 30000);
+
+    wss.on("close", () => {
+        clearInterval(pingInterval);
+    });
+
     wss.on("connection", (ws) => {
+        ws.alive = true;
+        ws.on("pong", () => { ws.alive = true; });
+
         ws.id = Math.random().toString(36).substring(2, 9);
         ws.roomId = null;
         localClients.add(ws);

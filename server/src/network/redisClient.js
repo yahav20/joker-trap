@@ -6,7 +6,8 @@ const baseOptions = {
     family: 4, // Force IPv4 (fixes Node 18+ DNS resolution issues)
     maxRetriesPerRequest: null, // Don't crash on high retries, just queue
     retryStrategy(times) {
-        return Math.min(times * 50, 2000);
+        // Retry with backing off delay. Max wait time 60 seconds.
+        return Math.min(times * 2000, 60000);
     }
 };
 
