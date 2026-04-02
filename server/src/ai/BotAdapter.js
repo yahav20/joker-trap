@@ -43,7 +43,7 @@ class BotAdapter {
      * @param {number} [playerCount=PLAYER_COUNT]
      * @param {string|null} [roomId=null]
      */
-    constructor(id, difficulty = 'medium', bluffChance = 0.30, playerCount = PLAYER_COUNT, roomId = null) {
+    constructor(id, difficulty = 'hard', bluffChance = 0.30, playerCount = PLAYER_COUNT, roomId = null) {
         this.id = id;
         this.difficulty = difficulty;
         this.bluffChance = bluffChance;
@@ -60,6 +60,9 @@ class BotAdapter {
 
         /** Track the active timeout so it can be cleanly aborted. */
         this.timeoutId = null;
+
+        /** @type {string|null} */
+        this.avatar = null;
 
         /** @type {BotMemory} */
         this.memory = new BotMemory(playerCount, id);
@@ -387,6 +390,7 @@ class BotAdapter {
             difficulty: this.difficulty,
             bluffChance: this.bluffChance,
             hand: this.hand,
+            avatar: this.avatar,
             _offerCount: this._offerCount,
             memory: this.memory.toJSON()
         };
@@ -395,6 +399,7 @@ class BotAdapter {
     static fromJSON(data, playerCount = 4, roomId = null) {
         const bot = new BotAdapter(data.id, data.difficulty, data.bluffChance, playerCount, roomId);
         bot.hand = data.hand;
+        bot.avatar = data.avatar;
         bot._offerCount = data._offerCount;
         bot.memory = BotMemory.fromJSON(data.memory);
         return bot;

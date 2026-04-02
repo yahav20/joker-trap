@@ -3,6 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Card } from './Card';
 import { CardData } from '../../constants/Cards';
 import { styles as gameStyles } from '../../styles/gameStyles';
+import { AVATARS } from '../../constants/avatars';
+import { Image } from 'react-native';
 
 /**
  * Props for the PlayerZone component.
@@ -10,6 +12,8 @@ import { styles as gameStyles } from '../../styles/gameStyles';
 interface PlayerZoneProps {
     /** Seat ID of the player this zone belongs to. `null` while the game hasn't assigned IDs. */
     playerId: number | null;
+    /** The player's avatar icon identifier */
+    avatar?: string;
     /**
      * The player's hand to render.
      * Each element is a `CardData` value; opponents always receive `null` (face-down) cards.
@@ -48,6 +52,7 @@ interface PlayerZoneProps {
  */
 export const PlayerZone: React.FC<PlayerZoneProps> = ({
     playerId,
+    avatar,
     hand,
     isOpponent = true,
     rotation = '0deg',
@@ -68,7 +73,12 @@ export const PlayerZone: React.FC<PlayerZoneProps> = ({
 
     return (
         <View style={[highlightStyle, styles.wrapper]}>
-            {!vertical && <Text style={gameStyles.playerLabel}>P{playerId}</Text>}
+            {!vertical && (
+                <View style={styles.horizontalLabelRow}>
+                    {avatar && AVATARS[avatar] && <Image source={AVATARS[avatar]} style={styles.avatarIcon} />}
+                    <Text style={gameStyles.playerLabel}>P{playerId}</Text>
+                </View>
+            )}
 
             {vertical ? (
                 // Portrait stack (column) – label floats over the top card
@@ -89,6 +99,7 @@ export const PlayerZone: React.FC<PlayerZoneProps> = ({
                     </View>
                     {/* Floating label over the top edge of the first card */}
                     <View style={styles.floatingLabelBox}>
+                        {avatar && AVATARS[avatar] && <Image source={AVATARS[avatar]} style={styles.avatarIconSmall} />}
                         <Text style={styles.floatingLabel}>P{playerId}</Text>
                     </View>
                 </View>
@@ -157,4 +168,25 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
         fontSize: 12,
     },
+    horizontalLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginBottom: 4
+    },
+    avatarIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: '#fff'
+    },
+    avatarIconSmall: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderColor: '#fff',
+        marginRight: 4
+    }
 });

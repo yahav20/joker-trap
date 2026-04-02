@@ -83,7 +83,7 @@ export type GameOverPayload = {
  *  - `connected`       – whether the socket is currently open
  *  - `reconnect`       – manually re-initiate the WebSocket connection
  */
-export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?: string) => {
+export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?: string, avatarParam?: string) => {
     const [roomCode, setRoomCode] = useState<string | null>(null);
     /** This player's unique seat ID (0–3), assigned by the server after connection. */
     const [myPlayerId, setMyPlayerId] = useState<number | null>(null);
@@ -112,8 +112,15 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
     /** True while the WebSocket is in OPEN state. Drives the DisconnectedOverlay. */
     const [connected, setConnected] = useState(false);
 
+    /** Pulses `true` for 5 seconds when the local player receives the Joker card. */
+    const [receivedJoker, setReceivedJoker] = useState(false);
+    const jokerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     /** Lightweight list of opponents — only hand count is known, not the actual cards. */
     const [opponents, setOpponents] = useState<PlayerInfo[]>([]);
+
+    /** Metadata mapping player ID to their avatar and bot status. */
+    const [playersData, setPlayersData] = useState<{id: number, avatar: string, isBot: boolean}[]>([]);
 
     const currentTurnRef = useRef(currentTurn);
     useEffect(() => {
@@ -167,12 +174,12 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
             if (sessionTokenRef.current && roomIdRef.current) {
                 ws.current?.send(JSON.stringify({ 
                     event: 'resume_room', 
-                    payload: { roomId: roomIdRef.current, sessionToken: sessionTokenRef.current } 
+                    payload: { roomId: roomIdRef.current, sessionToken: sessionTokenRef.current, avatar: avatarParam || '' } 
                 }));
             } else if (action === 'create') {
-                ws.current?.send(JSON.stringify({ event: 'create_room', payload: { botCount: parseInt(botsParam || '0', 10) } }));
+                ws.current?.send(JSON.stringify({ event: 'create_room', payload: { botCount: parseInt(botsParam || '0', 10), avatar: avatarParam || '' } }));
             } else if (action === 'join' && roomIdParam) {
-                ws.current?.send(JSON.stringify({ event: 'join_room', payload: { roomId: roomIdParam } }));
+                ws.current?.send(JSON.stringify({ event: 'join_room', payload: { roomId: roomIdParam, avatar: avatarParam || '' } }));
             }
         };
 
@@ -220,6 +227,10 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                         setRoomCode(payload.roomId);
                         roomIdRef.current = payload.roomId;
                         setGameMessage(payload.message || `Resumed Room: ${payload.roomId}`);
+                        break;
+
+                    case 'room_players_update':
+                        setPlayersData(payload.players || []);
                         break;
 
                     /**
@@ -325,6 +336,13 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                         const lied =
                             got.toUpperCase() !== wanted &&
                             !(got === "Joker" && wanted === "JOKER");
+
+                        if (got === 'Joker' || got?.toUpperCase() === 'JOKER') {
+                            // Local player just received the Joker — trigger overlay.
+                            if (jokerTimerRef.current) clearTimeout(jokerTimerRef.current);
+                            setReceivedJoker(true);
+                            jokerTimerRef.current = setTimeout(() => setReceivedJoker(false), 5000);
+                        }
 
                         if (lied) {
                             showToast(`Opponent lied! You asked for ${wanted} but got ${got}.`);
@@ -445,6 +463,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
             ws.current?.close();
             if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
             if (reconnectTimerRef.current) clearInterval(reconnectTimerRef.current);
+            if (jokerTimerRef.current) clearTimeout(jokerTimerRef.current);
         };
     }, [connect]);
 
@@ -465,7 +484,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
     return {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
         currentTurn, opponents, myPlayerId, sendAction, connected, roomCode,
-        isReconnecting,
+        isReconnecting, receivedJoker, playersData,
         reconnect: () => connect(false)
     };
 };

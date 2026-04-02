@@ -11,6 +11,16 @@ const { acquireLock, releaseLock } = require("./locks");
 const { getRoomState, saveRoomState } = require("./roomStore");
 const { publishEvent } = require("./broadcast");
 
+const AVATAR_KEYS = [
+    'blackandwhite_joker', 'canday_joker', 'deadpool_joker', 'ghost_joker', 
+    'harli_joker', 'ice_joker', 'magic_joker', 'mechinacal_joker', 
+    'momie_joker', 'noar_joker', 'pirate_joker', 'purple_joker', 
+    'robot_joker', 'wizard_joker', 'wood_joker', 'zombie_joker'
+];
+function getRandomAvatar() {
+    return AVATAR_KEYS[Math.floor(Math.random() * AVATAR_KEYS.length)];
+}
+
 // -----------------------------------------------------------------------------
 // BOT PROXY FACTORY (shared by executeActionOnRoom and startGame)
 // -----------------------------------------------------------------------------
@@ -193,8 +203,9 @@ async function startGame(roomState) {
 
     for (let b = 0; b < numBots; b++) {
         const botId = roomState.clientsInfo.length + b;
-        const diff = b === 0 ? 'hard' : 'medium';
+        const diff = 'hard';
         const bot = new BotAdapter(botId, diff, 0.25, PLAYER_COUNT, roomId);
+        bot.avatar = getRandomAvatar();
         botInstances.push(bot);
     }
 
@@ -213,6 +224,16 @@ async function startGame(roomState) {
     roomState.botsConfig = botInstances.map(b => b.toJSON());
 
     await saveRoomState(roomId, roomState, true);
+
+    // Broadcast players update so clients know bot avatars
+    const players = [];
+    roomState.clientsInfo.forEach(c => {
+        players.push({ id: c.playerId, avatar: c.avatar || 'blackandwhite_joker', isBot: false });
+    });
+    roomState.botsConfig.forEach(b => {
+        players.push({ id: b.id, avatar: b.avatar || 'blackandwhite_joker', isBot: true });
+    });
+    publishEvent(roomId, "room_players_update", { players });
 
     // Publish to WebSocket clients
     for (const out of outgoingEvents) {

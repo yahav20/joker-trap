@@ -13,6 +13,35 @@ const { getRoomState, saveRoomState } = require("./roomStore");
 const { publishEvent, sendError } = require("./broadcast");
 const { executeActionOnRoom, checkRoomStart, checkRoomRestart } = require("./gameExecution");
 
+const AVATAR_KEYS = [
+    'blackandwhite_joker', 'canday_joker', 'deadpool_joker', 'ghost_joker', 
+    'harli_joker', 'ice_joker', 'magic_joker', 'mechinacal_joker', 
+    'momie_joker', 'noar_joker', 'pirate_joker', 'purple_joker', 
+    'robot_joker', 'wizard_joker', 'wood_joker', 'zombie_joker'
+];
+function getRandomAvatar() {
+    return AVATAR_KEYS[Math.floor(Math.random() * AVATAR_KEYS.length)];
+}
+
+function broadcastPlayersUpdate(roomId, roomState) {
+    const players = [];
+    roomState.clientsInfo.forEach(c => {
+        players.push({
+            id: c.playerId,
+            avatar: c.avatar || 'blackandwhite_joker',
+            isBot: false,
+        });
+    });
+    roomState.botsConfig.forEach(b => {
+        players.push({
+            id: b.id,
+            avatar: b.avatar || 'blackandwhite_joker',
+            isBot: true,
+        });
+    });
+    publishEvent(roomId, "room_players_update", { players });
+}
+
 /** Timer map for disconnect grace periods: key is `${roomId}_${playerId}` */
 const botTimeouts = new Map();
 
@@ -32,7 +61,7 @@ async function handleCreateRoom(ws, payload) {
     const roomState = {
         id: roomId,
         botCount,
-        clientsInfo: [{ id: ws.id, playerId: 0, sessionToken, connected: true, readyForRestart: false }],
+        clientsInfo: [{ id: ws.id, playerId: 0, sessionToken, connected: true, readyForRestart: false, avatar: payload.avatar || getRandomAvatar() }],
         botsConfig: [],
         gameData: null
     };
@@ -50,6 +79,7 @@ async function handleCreateRoom(ws, payload) {
             payload: { roomId, botCount, sessionToken, message: `Room created. Code: ${roomId}` }
         }));
 
+        broadcastPlayersUpdate(roomId, roomState);
         await checkRoomStart(roomState);
     } finally {
         await releaseLock(roomId);
@@ -83,7 +113,7 @@ async function handleJoinRoom(ws, payload) {
         ws.roomId = roomId;
         ws.playerId = newPlayerId;
 
-        roomState.clientsInfo.push({ id: ws.id, playerId: newPlayerId, sessionToken, connected: true, readyForRestart: false });
+        roomState.clientsInfo.push({ id: ws.id, playerId: newPlayerId, sessionToken, connected: true, readyForRestart: false, avatar: payload.avatar || getRandomAvatar() });
         await saveRoomState(roomId, roomState, true);
 
         ws.send(JSON.stringify({
@@ -91,6 +121,7 @@ async function handleJoinRoom(ws, payload) {
             payload: { roomId, botCount: roomState.botCount, sessionToken, message: `Joined room ${roomId}` }
         }));
 
+        broadcastPlayersUpdate(roomId, roomState);
         await checkRoomStart(roomState);
     } finally {
         await releaseLock(roomId);
@@ -145,6 +176,9 @@ async function handleResumeRoom(ws, payload) {
         // Re-bind to room
         clientInfo.connected = true;
         clientInfo.id = ws.id;
+        if (payload.avatar) {
+            clientInfo.avatar = payload.avatar;
+        }
         ws.roomId = roomId;
         ws.playerId = clientInfo.playerId;
 
@@ -170,6 +204,7 @@ async function handleResumeRoom(ws, payload) {
             }));
         }
 
+        broadcastPlayersUpdate(roomId, roomState);
         publishEvent(roomId, "game_update", { message: `Player ${clientInfo.playerId} reconnected.` });
 
         // Trigger lobby check if resuming inside lobby
@@ -247,17 +282,73 @@ async function replacePlayerWithBot(roomId, playerId) {
         roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== playerId);
         roomState.botCount++;
 
-        const bot = new BotAdapter(playerId, 'medium', 0.25, PLAYER_COUNT, roomId);
+        const bot = new BotAdapter(playerId, 'hard', 0.25, PLAYER_COUNT, roomId);
+        bot.avatar = getRandomAvatar();
         const savedPlayer = roomState.gameData.players.find(p => p.id === playerId);
         if (savedPlayer) bot.hand = savedPlayer.hand;
 
         roomState.botsConfig.push(bot.toJSON());
         await saveRoomState(roomId, roomState, true);
 
+        broadcastPlayersUpdate(roomId, roomState);
         publishEvent(roomId, "game_update", { message: `Player ${playerId} abandoned. A bot took over.` });
         await executeActionOnRoom(roomId, playerId, "RESUME_BOT", {}, false);
     } catch (err) {
         logger.error(`Error replacing suspended player with bot: ${err.message}`);
+    } finally {
+        await releaseLock(roomId);
+    }
+}
+
+async function handleLeaveRoom(ws) {
+    if (!ws.roomId) return;
+    const roomId = ws.roomId;
+
+    const locked = await acquireLock(roomId);
+    if (!locked) return;
+
+    try {
+        const roomState = await getRoomState(roomId);
+        if (!roomState) return;
+
+        const clientInfo = roomState.clientsInfo.find(c => c.playerId === ws.playerId);
+        if (!clientInfo) return;
+
+        clientInfo.connected = false;
+
+        const otherConnectedHumans = roomState.clientsInfo.filter(c => c.connected && c.playerId !== ws.playerId).length;
+        
+        if (otherConnectedHumans === 0) {
+            logger.info(`Player explicitly left and is the last human in room ${roomId}. Closing game.`);
+            roomState.clientsInfo = [];
+            if (roomState.gameData) {
+                roomState.gameData.over = true;
+            }
+            publishEvent(roomId, "game_over", { loserId: ws.playerId, winnerIds: [] });
+        } else {
+            logger.info(`Player ${ws.playerId} explicitly left. Replacing with Bot immediately.`);
+            roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== ws.playerId);
+            roomState.botCount++;
+
+            const bot = new BotAdapter(ws.playerId, 'hard', 0.25, PLAYER_COUNT, roomId);
+            bot.avatar = getRandomAvatar();
+            if (roomState.gameData) {
+                const savedPlayer = roomState.gameData.players.find(p => p.id === ws.playerId);
+                if (savedPlayer) bot.hand = savedPlayer.hand;
+            }
+
+            roomState.botsConfig.push(bot.toJSON());
+            
+            broadcastPlayersUpdate(roomId, roomState);
+            publishEvent(roomId, "game_update", { message: `Player explicitly left. A bot took over.` });
+            await executeActionOnRoom(roomId, ws.playerId, "RESUME_BOT", {}, false);
+        }
+        await saveRoomState(roomId, roomState, true);
+        
+        // Remove room binding so handleDisconnect won't process them again if they close WS later
+        ws.roomId = null; 
+    } catch (err) {
+        logger.error(`Error in handleLeaveRoom: ${err.message}`);
     } finally {
         await releaseLock(roomId);
     }
@@ -281,5 +372,6 @@ module.exports = {
     handleResumeRoom,
     handleGameAction,
     handleDisconnect,
+    handleLeaveRoom,
     clearAllBotTimeouts
 };

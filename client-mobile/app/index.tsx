@@ -5,6 +5,10 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BACKGROUND } from '../constants/Cards';
+import { useAvatar } from '../hooks/useAvatar';
+import { AvatarPicker } from '../components/joker-trap/AvatarPicker';
+import { AVATARS } from '../constants/avatars';
+import { Image } from 'react-native';
 
 /**
  * Static game rules content displayed in the in-app rules modal.
@@ -41,6 +45,8 @@ const RULES = [
 export default function HomeScreen() {
     const router = useRouter();
     const [rulesVisible, setRulesVisible] = useState(false);
+    const { avatar, saveAvatar } = useAvatar();
+    const [pickerVisible, setPickerVisible] = useState(false);
 
     // Room logic state
     const [createVisible, setCreateVisible] = useState(false);
@@ -50,13 +56,13 @@ export default function HomeScreen() {
 
     const handleCreateRoom = () => {
         setCreateVisible(false);
-        router.push({ pathname: '/game', params: { action: 'create', bots: botCount.toString() } });
+        router.push({ pathname: '/game', params: { action: 'create', bots: botCount.toString(), avatar: avatar || '' } });
     };
 
     const handleJoinRoom = () => {
         if (!roomCodeInput.trim()) return;
         setJoinVisible(false);
-        router.push({ pathname: '/game', params: { action: 'join', roomId: roomCodeInput.trim().toUpperCase() } });
+        router.push({ pathname: '/game', params: { action: 'join', roomId: roomCodeInput.trim().toUpperCase(), avatar: avatar || '' } });
     };
 
     return (
@@ -70,6 +76,15 @@ export default function HomeScreen() {
                     onPress={() => setRulesVisible(true)}
                 >
                     <Text style={styles.rulesIconText}>📖</Text>
+                </TouchableOpacity>
+
+                {/* Avatar Icon - Top Right */}
+                <TouchableOpacity
+                    style={styles.avatarIconButton}
+                    activeOpacity={0.7}
+                    onPress={() => setPickerVisible(true)}
+                >
+                    {avatar ? <Image source={AVATARS[avatar]} style={styles.avatarIconImage} /> : <View style={styles.avatarIconPlaceholder} />}
                 </TouchableOpacity>
 
                 {/* Logo / Title */}
@@ -182,6 +197,13 @@ export default function HomeScreen() {
                 </View>
             </Modal>
 
+            <AvatarPicker 
+                visible={pickerVisible}
+                currentAvatar={avatar}
+                onSelect={(k) => saveAvatar(k)}
+                onClose={() => setPickerVisible(false)}
+            />
+
         </ImageBackground>
     );
 }
@@ -264,6 +286,31 @@ const styles = StyleSheet.create({
     },
     rulesIconText: {
         fontSize: 22,
+    },
+    avatarIconButton: {
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+        zIndex: 10,
+        backgroundColor: '#2b2b2b',
+        overflow: 'hidden'
+    },
+    avatarIconImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover'
+    },
+    avatarIconPlaceholder: {
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#444'
     },
     // Modals
     modalOverlay: {

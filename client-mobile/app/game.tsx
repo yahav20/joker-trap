@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, SafeAreaView, ImageBackground, LayoutAnimation, Platform, UIManager, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, SafeAreaView, ImageBackground, LayoutAnimation, Platform, UIManager, StyleSheet, TouchableOpacity, Alert, BackHandler } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { useGameSocket } from '../hooks/useGameSocket';
+import { useSoundEffects } from '../hooks/useSoundEffects';
 import { BACKGROUND } from '../constants/Cards';
 import { styles as gameStyles } from '../styles/gameStyles';
 
@@ -14,6 +15,9 @@ import { GameOverModal } from '../components/joker-trap/GameOverModal';
 import { DisconnectedOverlay } from '../components/joker-trap/DisconnectedOverlay';
 import { RequestModal } from '../components/joker-trap/RequestModal';
 import { Lobby } from '../components/joker-trap/Lobby';
+import { JokerLaughOverlay } from '../components/joker-trap/JokerLaughOverlay';
+import { AVATARS } from '../constants/avatars';
+import { Image } from 'react-native';
 
 /**
  * Enable smooth layout animations on Android.
@@ -37,12 +41,22 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
  */
 export default function App() {
     const router = useRouter();
-    const params = useLocalSearchParams<{ action: string, roomId?: string, bots?: string }>();
+    const params = useLocalSearchParams<{ action: string, roomId?: string, bots?: string, avatar?: string }>();
 
     const {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
-        currentTurn, opponents, myPlayerId, sendAction, connected, roomCode, reconnect, isReconnecting
-    } = useGameSocket(params.action, params.roomId, params.bots);
+        currentTurn, opponents, myPlayerId, sendAction, connected, roomCode, reconnect, isReconnecting,
+        receivedJoker, playersData,
+    } = useGameSocket(params.action, params.roomId, params.bots, params.avatar);
+
+    const { playFlip, playLaugh } = useSoundEffects();
+
+    /** Fire the evil-laugh sound exactly once each time the Joker is received. */
+    React.useEffect(() => {
+        if (receivedJoker) {
+            playLaugh();
+        }
+    }, [receivedJoker]);
 
     /**
      * Map player seat IDs to the three opponent UI positions.
@@ -60,6 +74,11 @@ export default function App() {
     const leftObj = opponents.find(o => o.id === leftOppId);
     const topObj = opponents.find(o => o.id === topOppId);
     const rightObj = opponents.find(o => o.id === rightOppId);
+
+    const leftAvatar = playersData.find(p => p.id === leftOppId)?.avatar;
+    const topAvatar = playersData.find(p => p.id === topOppId)?.avatar;
+    const rightAvatar = playersData.find(p => p.id === rightOppId)?.avatar;
+    const myAvatar = playersData.find(p => p.id === myPlayerId)?.avatar || params.avatar;
 
     // Build face-down hand arrays for each opponent zone.
     const leftHand = Array(leftObj ? leftObj.handCount : 4).fill(null);
@@ -83,6 +102,7 @@ export default function App() {
      */
     const handleCardOffer = (index: number) => {
         if (currentTurn?.phase?.includes('offer') && currentTurn.sender === myPlayerId) {
+            playFlip();
             sendAction('offer_card', { cardIndex: index });
         }
     };
@@ -96,6 +116,8 @@ export default function App() {
     const handleTableChoice = (index: number) => {
         const isDeciding = (currentTurn.phase === 'waiting_for_first_decision' || currentTurn.phase === 'waiting_for_second_decision') && currentTurn.receiver === myPlayerId;
         if (!isDeciding) return;
+
+        playFlip();
 
         if (currentTurn.phase === 'waiting_for_first_decision' && index === 0) {
             sendAction('make_decision', { decision: 'accept' });
@@ -112,6 +134,37 @@ export default function App() {
     const handleDecisionAction = (decision: string) => {
         sendAction('make_decision', { decision });
     };
+
+    /**
+     * Confirms before leaving the game (via hardware back or UI back).
+     */
+    const handleLeaveGame = React.useCallback(() => {
+        Alert.alert(
+            "התנתקות מהמשחק",
+            "האם אתה בטוח שאתה רוצה להתנתק מהמשחק?",
+            [
+                { text: "לא", style: "cancel" },
+                { 
+                    text: "כן",
+                    style: "destructive",
+                    onPress: () => {
+                        sendAction('leave_room', {});
+                        router.replace('/');
+                    }
+                }
+            ],
+            { cancelable: true }
+        );
+        return true; // prevent default back
+    }, [sendAction, router]);
+
+    React.useEffect(() => {
+        const backHandler = BackHandler.addEventListener(
+            "hardwareBackPress",
+            handleLeaveGame
+        );
+        return () => backHandler.remove();
+    }, [handleLeaveGame]);
 
     // ── Lobby gate ───────────────────────────────────────────────────────────
 
@@ -136,7 +189,7 @@ export default function App() {
             <SafeAreaView style={gameStyles.container}>
 
                 {/* Back to Home button — top left */}
-                <TouchableOpacity style={localStyles.backButton} onPress={() => router.replace('/')}>
+                <TouchableOpacity style={localStyles.backButton} onPress={handleLeaveGame}>
                     <Text style={localStyles.backButtonText}>‹ Home</Text>
                 </TouchableOpacity>
 
@@ -149,15 +202,15 @@ export default function App() {
 
                 {/* Opponents */}
                 <View style={gameStyles.topZone}>
-                    <PlayerZone playerId={topOppId} hand={topHand} rotation="180deg" isActive={currentTurn.sender === topOppId} isReceiver={currentTurn.receiver === topOppId} />
+                    <PlayerZone playerId={topOppId} hand={topHand} avatar={topAvatar} rotation="180deg" isActive={currentTurn.sender === topOppId} isReceiver={currentTurn.receiver === topOppId} />
                 </View>
 
                 <View style={gameStyles.leftZone}>
-                    <PlayerZone playerId={leftOppId} hand={leftHand} vertical isActive={currentTurn.sender === leftOppId} isReceiver={currentTurn.receiver === leftOppId} />
+                    <PlayerZone playerId={leftOppId} hand={leftHand} avatar={leftAvatar} vertical isActive={currentTurn.sender === leftOppId} isReceiver={currentTurn.receiver === leftOppId} />
                 </View>
 
                 <View style={gameStyles.rightZone}>
-                    <PlayerZone playerId={rightOppId} hand={rightHand} vertical isActive={currentTurn.sender === rightOppId} isReceiver={currentTurn.receiver === rightOppId} />
+                    <PlayerZone playerId={rightOppId} hand={rightHand} avatar={rightAvatar} vertical isActive={currentTurn.sender === rightOppId} isReceiver={currentTurn.receiver === rightOppId} />
                 </View>
 
                 {/* Center Table Area */}
@@ -180,7 +233,12 @@ export default function App() {
                                 : { padding: 5 },
                         { alignItems: 'center' }
                     ]}>
-                        <Text style={localStyles.youLabel}>You</Text>
+                        <View style={localStyles.myInfoRow}>
+                            {myAvatar && AVATARS[myAvatar] && (
+                                <Image source={AVATARS[myAvatar]} style={localStyles.myAvatarIcon} />
+                            )}
+                            <Text style={localStyles.youLabel}>You</Text>
+                        </View>
                         <View style={localStyles.myHandRow}>
                             {myHand.map((card, i) => (
                                 <Card
@@ -214,6 +272,9 @@ export default function App() {
                 <DisconnectedOverlay onReturnHome={() => router.replace('/')} isReconnecting={isReconnecting} />
             )}
 
+            {/* Joker received — evil laugh + animation */}
+            <JokerLaughOverlay visible={receivedJoker} />
+
         </ImageBackground>
     );
 }
@@ -242,10 +303,22 @@ const localStyles = StyleSheet.create({
         color: '#fff',
         fontWeight: 'bold',
         fontSize: 14,
-        marginBottom: 4,
         textShadowColor: '#000',
         textShadowOffset: { width: 1, height: 1 },
         textShadowRadius: 3,
+    },
+    myInfoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+        gap: 6
+    },
+    myAvatarIcon: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        borderWidth: 1.5,
+        borderColor: '#fff'
     },
     myHandRow: {
         flexDirection: 'row',

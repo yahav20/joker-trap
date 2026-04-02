@@ -17,6 +17,7 @@ const {
     handleResumeRoom,
     handleGameAction,
     handleDisconnect,
+    handleLeaveRoom,
     clearAllBotTimeouts
 } = require("./handlers");
 
@@ -61,6 +62,8 @@ function startServer(port = PORT) {
                     await handleResumeRoom(ws, payload);
                 } else if (event === "restart_game") {
                     await handleRestartGame(ws);
+                } else if (event === "leave_room") {
+                    await handleLeaveRoom(ws);
                 } else {
                     await handleGameAction(ws, event, payload);
                 }
