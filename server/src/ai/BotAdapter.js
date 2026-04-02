@@ -30,17 +30,24 @@ const {
 const { PLAYER_COUNT, PHASES } = require("../config/constant");
 const logger = require("../utils/logger");
 
+
+
 class BotAdapter {
+    /** Static registry for all bot instances across rooms in this process. */
+    static activeBots = new Map(); // key: roomId_playerId, value: BotAdapter instance
+
     /**
      * @param {number} id          Unique player ID assigned to this bot.
      * @param {string} [difficulty='medium']  'easy', 'medium', or 'hard'.
      * @param {number} [bluffChance=0.30]  Probability of passing Joker on first offer.
      * @param {number} [playerCount=PLAYER_COUNT]
+     * @param {string|null} [roomId=null]
      */
-    constructor(id, difficulty = 'medium', bluffChance = 0.30, playerCount = PLAYER_COUNT) {
+    constructor(id, difficulty = 'medium', bluffChance = 0.30, playerCount = PLAYER_COUNT, roomId = null) {
         this.id = id;
         this.difficulty = difficulty;
         this.bluffChance = bluffChance;
+        this.roomId = roomId;
 
         /** @type {import('../game/GameState')|null} */
         this.game = null;
@@ -103,14 +110,54 @@ class BotAdapter {
 
     /** Helper to manage the single active thinking timeout */
     _setTimeout(fn, delay) {
-        if (this.timeoutId) clearTimeout(this.timeoutId);
-        this.timeoutId = setTimeout(fn, delay);
+        const key = `${this.roomId}_${this.id}`;
+        if (this.roomId) {
+            const existing = BotAdapter.activeBots.get(key);
+            if (existing && existing !== this) {
+                // Orphaned bot instance from a previous state reconstruction
+                existing.destroy();
+            }
+            BotAdapter.activeBots.set(key, this);
+        }
+
+        if (this.timeoutId) {
+            clearTimeout(this.timeoutId);
+        }
+
+        this.timeoutId = setTimeout(() => {
+            if (this.roomId && BotAdapter.activeBots.get(key) === this) {
+                BotAdapter.activeBots.delete(key);
+            }
+            this.timeoutId = null;
+            fn();
+        }, delay);
+
+        if (this.timeoutId && this.timeoutId.unref) {
+            this.timeoutId.unref();
+        }
     }
 
     /** Cleanly destroys this bot by aborting any pending background action */
     destroy() {
-        if (this.timeoutId) clearTimeout(this.timeoutId);
+        if (this.timeoutId) {
+            clearTimeout(this.timeoutId);
+            this.timeoutId = null;
+        }
+        if (this.roomId) {
+            const key = `${this.roomId}_${this.id}`;
+            if (BotAdapter.activeBots.get(key) === this) {
+                BotAdapter.activeBots.delete(key);
+            }
+        }
         this.game = null;
+    }
+
+    /** Global cleanup of all active bot thinking timers */
+    static abortAll() {
+        for (const bot of BotAdapter.activeBots.values()) {
+            if (bot.timeoutId) clearTimeout(bot.timeoutId);
+        }
+        BotAdapter.activeBots.clear();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -345,8 +392,8 @@ class BotAdapter {
         };
     }
 
-    static fromJSON(data, playerCount = 4) {
-        const bot = new BotAdapter(data.id, data.difficulty, data.bluffChance, playerCount);
+    static fromJSON(data, playerCount = 4, roomId = null) {
+        const bot = new BotAdapter(data.id, data.difficulty, data.bluffChance, playerCount, roomId);
         bot.hand = data.hand;
         bot._offerCount = data._offerCount;
         bot.memory = BotMemory.fromJSON(data.memory);

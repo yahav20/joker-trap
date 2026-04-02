@@ -247,7 +247,7 @@ async function replacePlayerWithBot(roomId, playerId) {
         roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== playerId);
         roomState.botCount++;
 
-        const bot = new BotAdapter(playerId, 'medium', 0.25, PLAYER_COUNT);
+        const bot = new BotAdapter(playerId, 'medium', 0.25, PLAYER_COUNT, roomId);
         const savedPlayer = roomState.gameData.players.find(p => p.id === playerId);
         if (savedPlayer) bot.hand = savedPlayer.hand;
 
@@ -271,6 +271,7 @@ function clearAllBotTimeouts() {
         clearTimeout(timeout);
     }
     botTimeouts.clear();
+    BotAdapter.abortAll();
 }
 
 module.exports = {

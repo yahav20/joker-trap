@@ -87,7 +87,7 @@ async function executeActionOnRoom(roomId, playerId, actionEvent, payload, isHum
         }));
 
         const game = GameState.fromJSON(roomState.gameData, adapters);
-        const botInstances = roomState.botsConfig.map(bData => BotAdapter.fromJSON(bData, PLAYER_COUNT));
+        const botInstances = roomState.botsConfig.map(bData => BotAdapter.fromJSON(bData, PLAYER_COUNT, roomId));
         const gameProxyForBots = createBotProxy(game, roomId);
 
         for (const bot of botInstances) {
@@ -194,7 +194,7 @@ async function startGame(roomState) {
     for (let b = 0; b < numBots; b++) {
         const botId = roomState.clientsInfo.length + b;
         const diff = b === 0 ? 'hard' : 'medium';
-        const bot = new BotAdapter(botId, diff, 0.25, PLAYER_COUNT);
+        const bot = new BotAdapter(botId, diff, 0.25, PLAYER_COUNT, roomId);
         botInstances.push(bot);
     }
 

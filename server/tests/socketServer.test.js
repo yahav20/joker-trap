@@ -123,6 +123,7 @@ describe("Socket Server Integration and Edge Cases", () => {
 
         // P1 creates a solo room with 3 bots
         const p1Create = waitForEvent(p1, "room_created");
+        const gameStart = waitForEvent(p1, "game_update");
         p1.send(JSON.stringify({ event: "create_room", payload: { botCount: 3 } }));
         const createPayload = await p1Create;
         const roomId = createPayload.roomId;
@@ -132,7 +133,7 @@ describe("Socket Server Integration and Edge Cases", () => {
         expect(typeof sessionToken).toBe("string");
 
         // Wait for game to start
-        await waitForEvent(p1, "game_update");
+        await gameStart;
 
         // P1 disconnects
         p1.close();
