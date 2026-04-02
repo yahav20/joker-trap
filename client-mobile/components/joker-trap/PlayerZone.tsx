@@ -11,7 +11,10 @@ import { Image } from 'react-native';
  */
 interface PlayerZoneProps {
     /** Seat ID of the player this zone belongs to. `null` while the game hasn't assigned IDs. */
+    /** Seat ID of the player this zone belongs to. `null` while the game hasn't assigned IDs. */
     playerId: number | null;
+    /** The player's display name */
+    playerName?: string;
     /** The player's avatar icon identifier */
     avatar?: string;
     /**
@@ -52,6 +55,7 @@ interface PlayerZoneProps {
  */
 export const PlayerZone: React.FC<PlayerZoneProps> = ({
     playerId,
+    playerName,
     avatar,
     hand,
     isOpponent = true,
@@ -60,6 +64,7 @@ export const PlayerZone: React.FC<PlayerZoneProps> = ({
     isReceiver,
     vertical = false,
 }) => {
+    const labelString = playerName ? `${playerName} (P${playerId})` : `P${playerId}`;
     // Determine the highlight border/background based on turn role.
     const highlightStyle = isActive
         ? { borderColor: '#4da6ff', borderWidth: 2, borderRadius: 10, backgroundColor: 'rgba(77,166,255,0.2)' }
@@ -76,7 +81,7 @@ export const PlayerZone: React.FC<PlayerZoneProps> = ({
             {!vertical && (
                 <View style={styles.horizontalLabelRow}>
                     {avatar && AVATARS[avatar] && <Image source={AVATARS[avatar]} style={styles.avatarIcon} />}
-                    <Text style={gameStyles.playerLabel}>P{playerId}</Text>
+                    <Text style={gameStyles.playerLabel}>{labelString}</Text>
                 </View>
             )}
 
@@ -97,10 +102,10 @@ export const PlayerZone: React.FC<PlayerZoneProps> = ({
                         ))}
                         {hand.length === 0 && <Text style={styles.emptyText}>Empty</Text>}
                     </View>
-                    {/* Floating label over the top edge of the first card */}
-                    <View style={styles.floatingLabelBox}>
-                        {avatar && AVATARS[avatar] && <Image source={AVATARS[avatar]} style={styles.avatarIconSmall} />}
-                        <Text style={styles.floatingLabel}>P{playerId}</Text>
+                    {/* Floating label moved above the card instead of overlapping */}
+                    <View style={styles.verticalLabelBox}>
+                        {avatar && AVATARS[avatar] && <Image source={AVATARS[avatar]} style={styles.avatarIconVertical} />}
+                        <Text style={styles.floatingLabel}>{labelString}</Text>
                     </View>
                 </View>
             ) : (
@@ -137,12 +142,9 @@ const styles = StyleSheet.create({
     columnStack: {
         alignItems: 'center',
     },
-    floatingLabelBox: {
-        position: 'absolute',
-        top: 4,
-        left: 0,
-        right: 0,
+    verticalLabelBox: {
         alignItems: 'center',
+        marginBottom: 8,
         zIndex: 10,
     },
     floatingLabel: {
@@ -171,22 +173,22 @@ const styles = StyleSheet.create({
     horizontalLabelRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        marginBottom: 4
+        gap: 8,
+        marginBottom: 8
     },
     avatarIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         borderWidth: 2,
         borderColor: '#fff'
     },
-    avatarIconSmall: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 1.5,
+    avatarIconVertical: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        borderWidth: 2,
         borderColor: '#fff',
-        marginRight: 4
+        marginBottom: 4
     }
 });

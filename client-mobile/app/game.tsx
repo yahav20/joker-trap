@@ -42,13 +42,13 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
  */
 export default function App() {
     const router = useRouter();
-    const params = useLocalSearchParams<{ action: string, roomId?: string, bots?: string, avatar?: string }>();
+    const params = useLocalSearchParams<{ action: string, roomId?: string, bots?: string, avatar?: string, playerName?: string }>();
 
     const {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
         currentTurn, opponents, myPlayerId, sendAction, connected, roomCode, reconnect, isReconnecting,
         receivedJoker, playersData,
-    } = useGameSocket(params.action, params.roomId, params.bots, params.avatar);
+    } = useGameSocket(params.action, params.roomId, params.bots, params.avatar, params.playerName);
 
     const { playFlip, playLaugh } = useSoundEffects();
 
@@ -80,6 +80,11 @@ export default function App() {
     const topAvatar = playersData.find(p => p.id === topOppId)?.avatar;
     const rightAvatar = playersData.find(p => p.id === rightOppId)?.avatar;
     const myAvatar = playersData.find(p => p.id === myPlayerId)?.avatar || params.avatar;
+
+    const leftName = playersData.find(p => p.id === leftOppId)?.name;
+    const topName = playersData.find(p => p.id === topOppId)?.name;
+    const rightName = playersData.find(p => p.id === rightOppId)?.name;
+    const myName = playersData.find(p => p.id === myPlayerId)?.name || params.playerName || 'You';
 
     const isMyTurn = (currentTurn.sender === myPlayerId || currentTurn.receiver === myPlayerId) && currentTurn.phase !== 'lobby';
     const showLoading = !connected && !isReconnecting;
@@ -176,7 +181,7 @@ export default function App() {
     if (currentTurn?.phase === 'lobby' && !gameOverPayload) {
         return (
             <ImageBackground source={BACKGROUND} style={localStyles.background}>
-                <Lobby connected={connected} gameMessage={gameMessage} roomCode={roomCode} />
+                <Lobby connected={connected} gameMessage={gameMessage} roomCode={roomCode} players={playersData} />
             </ImageBackground>
         );
     }
@@ -207,15 +212,15 @@ export default function App() {
 
                 {/* Opponents */}
                 <View style={gameStyles.topZone}>
-                    <PlayerZone playerId={topOppId} hand={topHand} avatar={topAvatar} rotation="180deg" isActive={currentTurn.sender === topOppId} isReceiver={currentTurn.receiver === topOppId} />
+                    <PlayerZone playerId={topOppId} hand={topHand} avatar={topAvatar} playerName={topName} rotation="180deg" isActive={currentTurn.sender === topOppId} isReceiver={currentTurn.receiver === topOppId} />
                 </View>
 
                 <View style={gameStyles.leftZone}>
-                    <PlayerZone playerId={leftOppId} hand={leftHand} avatar={leftAvatar} vertical isActive={currentTurn.sender === leftOppId} isReceiver={currentTurn.receiver === leftOppId} />
+                    <PlayerZone playerId={leftOppId} hand={leftHand} avatar={leftAvatar} playerName={leftName} vertical isActive={currentTurn.sender === leftOppId} isReceiver={currentTurn.receiver === leftOppId} />
                 </View>
 
                 <View style={gameStyles.rightZone}>
-                    <PlayerZone playerId={rightOppId} hand={rightHand} avatar={rightAvatar} vertical isActive={currentTurn.sender === rightOppId} isReceiver={currentTurn.receiver === rightOppId} />
+                    <PlayerZone playerId={rightOppId} hand={rightHand} avatar={rightAvatar} playerName={rightName} vertical isActive={currentTurn.sender === rightOppId} isReceiver={currentTurn.receiver === rightOppId} />
                 </View>
 
                 {/* Center Table Area */}
@@ -242,7 +247,7 @@ export default function App() {
                             {myAvatar && AVATARS[myAvatar] && (
                                 <Image source={AVATARS[myAvatar]} style={localStyles.myAvatarIcon} />
                             )}
-                            <Text style={localStyles.youLabel}>You</Text>
+                            <Text style={localStyles.youLabel}>{myName} (You)</Text>
                         </View>
                         <View style={localStyles.myHandRow}>
                             {myHand.map((card, i) => (

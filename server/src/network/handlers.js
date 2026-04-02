@@ -25,6 +25,7 @@ function broadcastPlayersUpdate(roomId, roomState) {
         players.push({
             id: c.playerId,
             avatar: c.avatar || 'blackandwhite_joker',
+            name: c.playerName || `P${c.playerId}`,
             isBot: false,
         });
     });
@@ -32,6 +33,7 @@ function broadcastPlayersUpdate(roomId, roomState) {
         players.push({
             id: b.id,
             avatar: b.avatar || 'blackandwhite_joker',
+            name: `Bot ${b.id}`,
             isBot: true,
         });
     });
@@ -57,7 +59,7 @@ async function handleCreateRoom(ws, payload) {
     const roomState = {
         id: roomId,
         botCount,
-        clientsInfo: [{ id: ws.id, playerId: 0, sessionToken, connected: true, readyForRestart: false, avatar: payload.avatar || getRandomAvatar() }],
+        clientsInfo: [{ id: ws.id, playerId: 0, sessionToken, connected: true, readyForRestart: false, avatar: payload.avatar || getRandomAvatar(), playerName: payload.playerName || null }],
         botsConfig: [],
         gameData: null
     };
@@ -109,7 +111,7 @@ async function handleJoinRoom(ws, payload) {
         ws.roomId = roomId;
         ws.playerId = newPlayerId;
 
-        roomState.clientsInfo.push({ id: ws.id, playerId: newPlayerId, sessionToken, connected: true, readyForRestart: false, avatar: payload.avatar || getRandomAvatar() });
+        roomState.clientsInfo.push({ id: ws.id, playerId: newPlayerId, sessionToken, connected: true, readyForRestart: false, avatar: payload.avatar || getRandomAvatar(), playerName: payload.playerName || null });
         await saveRoomState(roomId, roomState, true);
 
         ws.send(JSON.stringify({
@@ -174,6 +176,9 @@ async function handleResumeRoom(ws, payload) {
         clientInfo.id = ws.id;
         if (payload.avatar) {
             clientInfo.avatar = payload.avatar;
+        }
+        if (payload.playerName) {
+            clientInfo.playerName = payload.playerName;
         }
         ws.roomId = roomId;
         ws.playerId = clientInfo.playerId;

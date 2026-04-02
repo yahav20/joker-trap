@@ -84,7 +84,7 @@ export type GameOverPayload = {
  *  - `connected`       – whether the socket is currently open
  *  - `reconnect`       – manually re-initiate the WebSocket connection
  */
-export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?: string, avatarParam?: string) => {
+export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?: string, avatarParam?: string, playerNameParam?: string) => {
     const [roomCode, setRoomCode] = useState<string | null>(null);
     /** This player's unique seat ID (0–3), assigned by the server after connection. */
     const [myPlayerId, setMyPlayerId] = useState<number | null>(null);
@@ -120,8 +120,8 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
     /** Lightweight list of opponents — only hand count is known, not the actual cards. */
     const [opponents, setOpponents] = useState<PlayerInfo[]>([]);
 
-    /** Metadata mapping player ID to their avatar and bot status. */
-    const [playersData, setPlayersData] = useState<{id: number, avatar: string, isBot: boolean}[]>([]);
+    /** Metadata mapping player ID to their avatar, name, and bot status. */
+    const [playersData, setPlayersData] = useState<{id: number, avatar: string, name: string, isBot: boolean}[]>([]);
 
     const currentTurnRef = useRef(currentTurn);
     useEffect(() => {
@@ -175,12 +175,12 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
             if (sessionTokenRef.current && roomIdRef.current) {
                 ws.current?.send(JSON.stringify({ 
                     event: 'resume_room', 
-                    payload: { roomId: roomIdRef.current, sessionToken: sessionTokenRef.current, avatar: avatarParam || '' } 
+                    payload: { roomId: roomIdRef.current, sessionToken: sessionTokenRef.current, avatar: avatarParam || '', playerName: playerNameParam || '' } 
                 }));
             } else if (action === 'create') {
-                ws.current?.send(JSON.stringify({ event: 'create_room', payload: { botCount: parseInt(botsParam || '0', 10), avatar: avatarParam || '' } }));
+                ws.current?.send(JSON.stringify({ event: 'create_room', payload: { botCount: parseInt(botsParam || '0', 10), avatar: avatarParam || '', playerName: playerNameParam || '' } }));
             } else if (action === 'join' && roomIdParam) {
-                ws.current?.send(JSON.stringify({ event: 'join_room', payload: { roomId: roomIdParam, avatar: avatarParam || '' } }));
+                ws.current?.send(JSON.stringify({ event: 'join_room', payload: { roomId: roomIdParam, avatar: avatarParam || '', playerName: playerNameParam || '' } }));
             }
         };
 

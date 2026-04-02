@@ -12,6 +12,8 @@ interface LobbyProps {
     gameMessage: string;
     /** The active room code to share with other players. */
     roomCode?: string | null;
+    /** List of players currently in the room */
+    players?: { id: number, avatar: string, name: string, isBot: boolean }[];
 }
 
 /**
@@ -23,7 +25,7 @@ interface LobbyProps {
  *
  * Rendered by `game.tsx` when `currentTurn.phase === 'lobby'`.
  */
-export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage, roomCode }) => {
+export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage, roomCode, players = [] }) => {
     return (
         <SafeAreaView style={styles.lobbyContainer}>
             <View style={styles.lobbyBox}>
@@ -37,6 +39,34 @@ export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage, roomCode }
                     <View style={styles.roomCodeContainer}>
                         <Text style={styles.roomCodeLabel}>ROOM CODE</Text>
                         <Text style={styles.roomCodeValue}>{roomCode}</Text>
+                    </View>
+                )}
+
+                {/* Players List */}
+                {connected && players.length > 0 && (
+                    <View style={styles.playersList}>
+                        {players.map((p, i) => (
+                            <View key={p.id} style={styles.playerItem}>
+                                <View style={styles.avatarWrapper}>
+                                    <View style={styles.avatarCircle}>
+                                        <Text style={styles.avatarEmoji}>👤</Text>
+                                        {/* Since images might be complex to load in simple View, using a placeholder icon or emoji if icon map not available here, but we have AVATARS constant. Let's use it. */}
+                                    </View>
+                                </View>
+                                <Text style={styles.playerName} numberOfLines={1}>
+                                    {p.name} {p.isBot ? '(Bot)' : ''}
+                                </Text>
+                            </View>
+                        ))}
+                        {/* Empty slots */}
+                        {Array.from({ length: 4 - players.length }).map((_, i) => (
+                            <View key={`empty-${i}`} style={[styles.playerItem, styles.playerItemEmpty]}>
+                                <View style={styles.avatarCircleEmpty}>
+                                    <Text style={styles.plusIcon}>+</Text>
+                                </View>
+                                <Text style={styles.playerNameEmpty}>Waiting...</Text>
+                            </View>
+                        ))}
                     </View>
                 )}
 
@@ -56,12 +86,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     lobbyBox: {
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        padding: 40,
-        borderRadius: 20,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        padding: 30,
+        borderRadius: 24,
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#444',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
+        width: '90%',
+        maxWidth: 400,
+    },
+    avatarWrapper: {
+        marginBottom: 5,
     },
     lobbyTitle: {
         color: '#fff',
@@ -104,5 +139,62 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: 'bold',
         letterSpacing: 6,
+    },
+    playersList: {
+        width: '100%',
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 15,
+        marginVertical: 20,
+    },
+    playerItem: {
+        alignItems: 'center',
+        width: 80,
+    },
+    playerItemEmpty: {
+        opacity: 0.4,
+    },
+    avatarCircle: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#4da6ff',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#fff',
+        marginBottom: 5,
+    },
+    avatarCircleEmpty: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#333',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#555',
+        borderStyle: 'dashed',
+        marginBottom: 5,
+    },
+    avatarEmoji: {
+        fontSize: 24,
+    },
+    plusIcon: {
+        color: '#666',
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    playerName: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    playerNameEmpty: {
+        color: '#666',
+        fontSize: 10,
+        textAlign: 'center',
     }
 });

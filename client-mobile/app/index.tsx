@@ -1,19 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity,
     ImageBackground, Modal, ScrollView, SafeAreaView, TextInput, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BACKGROUND } from '../constants/Cards';
-import { useAvatar } from '../hooks/useAvatar';
-import { AvatarPicker } from '../components/joker-trap/AvatarPicker';
+import { useProfile } from '../hooks/useProfile';
+import { ProfilePicker } from '../components/joker-trap/ProfilePicker';
 import { AVATARS } from '../constants/avatars';
 import { Image } from 'react-native';
 
 /**
  * Static game rules content displayed in the in-app rules modal.
- * Each entry has a short `title` and a longer `text` block.
- * New rule sections can be appended here without touching the JSX.
  */
 const RULES = [
     {
@@ -45,8 +43,15 @@ const RULES = [
 export default function HomeScreen() {
     const router = useRouter();
     const [rulesVisible, setRulesVisible] = useState(false);
-    const { avatar, saveAvatar } = useAvatar();
+    const { profile, saveProfile, isLoaded } = useProfile();
     const [pickerVisible, setPickerVisible] = useState(false);
+
+    // Auto-show profile picker if playerName is empty
+    useEffect(() => {
+        if (isLoaded && !profile.playerName) {
+            setPickerVisible(true);
+        }
+    }, [isLoaded, profile.playerName]);
 
     // Room logic state
     const [createVisible, setCreateVisible] = useState(false);
@@ -55,14 +60,16 @@ export default function HomeScreen() {
     const [roomCodeInput, setRoomCodeInput] = useState('');
 
     const handleCreateRoom = () => {
+        if (!profile.playerName) return setPickerVisible(true);
         setCreateVisible(false);
-        router.push({ pathname: '/game', params: { action: 'create', bots: botCount.toString(), avatar: avatar || '' } });
+        router.push({ pathname: '/game', params: { action: 'create', bots: botCount.toString(), avatar: profile.avatar || '', playerName: profile.playerName } });
     };
 
     const handleJoinRoom = () => {
+        if (!profile.playerName) return setPickerVisible(true);
         if (!roomCodeInput.trim()) return;
         setJoinVisible(false);
-        router.push({ pathname: '/game', params: { action: 'join', roomId: roomCodeInput.trim().toUpperCase(), avatar: avatar || '' } });
+        router.push({ pathname: '/game', params: { action: 'join', roomId: roomCodeInput.trim().toUpperCase(), avatar: profile.avatar || '', playerName: profile.playerName } });
     };
 
     return (
@@ -78,13 +85,24 @@ export default function HomeScreen() {
                     <Text style={styles.rulesIconText}>📖</Text>
                 </TouchableOpacity>
 
-                {/* Avatar Icon - Top Right */}
+                {/* Profile Area - Top Right */}
                 <TouchableOpacity
-                    style={styles.avatarIconButton}
+                    style={styles.profileArea}
                     activeOpacity={0.7}
                     onPress={() => setPickerVisible(true)}
                 >
-                    {avatar ? <Image source={AVATARS[avatar]} style={styles.avatarIconImage} /> : <View style={styles.avatarIconPlaceholder} />}
+                    {profile.playerName && (
+                        <View style={styles.profileNameBubble}>
+                            <Text style={styles.profileNameText}>{profile.playerName}</Text>
+                        </View>
+                    )}
+                    <View style={styles.avatarIconButton}>
+                        {profile.avatar ? (
+                            <Image source={AVATARS[profile.avatar]} style={styles.avatarIconImage} />
+                        ) : (
+                            <View style={styles.avatarIconPlaceholder} />
+                        )}
+                    </View>
                 </TouchableOpacity>
 
                 {/* Logo / Title */}
@@ -197,10 +215,10 @@ export default function HomeScreen() {
                 </View>
             </Modal>
 
-            <AvatarPicker 
+            <ProfilePicker 
                 visible={pickerVisible}
-                currentAvatar={avatar}
-                onSelect={(k) => saveAvatar(k)}
+                currentProfile={profile}
+                onSave={saveProfile}
                 onClose={() => setPickerVisible(false)}
             />
 
@@ -287,18 +305,43 @@ const styles = StyleSheet.create({
     rulesIconText: {
         fontSize: 22,
     },
-    avatarIconButton: {
+    profileArea: {
         position: 'absolute',
         top: 24,
         right: 24,
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+        flexDirection: 'row',
+        alignItems: 'center',
+        zIndex: 10,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingLeft: 16,
+        paddingRight: 6,
+        paddingVertical: 6,
+        borderRadius: 40,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.2)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        elevation: 5
+    },
+    profileNameBubble: {
+        marginRight: 12,
+    },
+    profileNameText: {
+        color: '#FFD700',
+        fontSize: 16,
+        fontWeight: '900',
+        letterSpacing: 0.5,
+    },
+    avatarIconButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.3)',
-        zIndex: 10,
+        borderColor: 'rgba(255,255,255,0.4)',
         backgroundColor: '#2b2b2b',
         overflow: 'hidden'
     },
