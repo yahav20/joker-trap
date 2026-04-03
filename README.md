@@ -1,13 +1,13 @@
 # 🃏 Joker Trap
 
-A real-time multiplayer bluffing card game built with Node.js and WebSockets, featuring cross-platform clients (Mobile, CLI) and advanced psychological AI bots.
+A high-stakes, real-time multiplayer bluffing card game. Built with **Node.js**, **WebSockets**, and **Redis**, featuring a premium **React Native** mobile experience and advanced AI bots.
 
 ---
 
 ## 🎮 Game Rules
 
 ### Overview
-4 players compete to collect **four cards of the same rank** (a "quad").  
+Joker Trap is a game of deception and memory. 4 players compete to collect **four cards of the same rank** (a "quad").  
 The player holding the **Joker** when someone completes a quad **loses**. Everyone else wins.
 
 ### The Deck
@@ -17,43 +17,32 @@ The player holding the **Joker** when someone completes a quad **loses**. Everyo
 | Joker | 1 |
 | **Total** | **17** |
 
-**Deal:** Player 0 (first sender) receives **5 cards**. Players 1–3 receive **4 cards** each.
+**Deal:** The first player (Sender) receives **5 cards**. All other players receive **4 cards** each.
 
 ---
 
 ### Turn Flow
+Each round involves a **Sender** (5 cards) and a **Receiver** (4 cards):
 
-Each round involves two players — a **Sender** (5 cards) and a **Receiver** (4 cards):
+1. **Request:** Receiver requests a rank (e.g., "K").
+2. **Offer:** Sender picks any card from their hand to offer face-down (**Lying is encouraged**).
+3. **Decision:** Receiver can:
+   - **Accept** the 1st offer.
+   - **Reject** and ask for a 2nd offer.
+   - **Force 3rd:** If both 1st and 2nd offers are rejected, the 3rd card is transferred automatically.
 
-```
-Receiver  →  requests a rank (e.g. "K")
-Sender    →  picks any card from hand to offer face-down (CAN LIE)
-Receiver  →  decides: Accept / Reject / Force 3rd card
-```
-
-#### Decision Options
-
-| After offer # | Receiver's choices |
-|---|---|
-| 1st offer | **Accept** the hidden card · **Reject** (ask for another) |
-| 2nd offer | **Accept 1st** card · **Accept 2nd** card · **Force 3rd** (mandatory) |
-| 3rd offer | Transfer is **automatic** — no choice |
-
-> **Bluffing:** The sender may offer any card regardless of what was requested.  
-> **Privacy:** Spectators only see that an interaction ended — never which card was exchanged.
+> **Bluffing:** The sender can offer the Joker even if a "K" was requested.  
+> **Victory:** Collect 4 of a kind and don't be the one holding the Joker!
 
 ---
 
-## ✨ Key Features
+## ✨ Features
 
-- **Cross-Platform Clients**: Play seamlessly from the React Native Mobile App (`client-mobile`), or the developer CLI (`client`).
-- **Dynamic Rooms**: Create private rooms with custom 5-letter invite codes.
-- **Advanced AI Bots**:
-  - Automatically fill empty room slots with bots (ranging from `medium` to `hard` difficulty).
-  - Bots utilise game theory and memory profiling to pass the Joker ambiguously based on a player's acceptance history.
-  - Bots actively try to collect "singletons" to block human players from completing quads if they hold the Joker.
-  - If a human disconnects mid-game, a Bot seamlessly takes over their hand and continues playing without aborting the match.
-- **Synchronised Restarts**: Games wait for all human players to vote to play again before reloading the room.
+- **📱 Premium Mobile App**: Modern UI built with React Native and Expo Router.
+- **🤖 Advanced AI**: Bots fill empty slots, using game theory to pass the Joker strategically.
+- **🔄 Persistence**: Stateless server architecture using **Redis** for room and state recovery.
+- **🔌 Robust Networking**: Automatic bot handover if a player disconnects mid-game.
+- **🎨 Rich Aesthetics**: Vibrantly designed game table and smooth animations.
 
 ---
 
@@ -61,15 +50,14 @@ Receiver  →  decides: Accept / Reject / Force 3rd card
 
 ```
 JokerTrap/
-├── server/
+├── server/                # Node.js + WebSocket + Redis Backend
 │   ├── src/
-│   │   ├── index.js           # Production entry point (Render-ready)
-│   │   ├── ai/                # BotAdapter, BotMemory, AdvancedBot heuristics
-│   │   ├── game/              # Deck, rules, and GameState state machine
-│   │   └── network/           # socketServer.js (Rooms, disconnect handovers)
-│   └── tests/                 # 75+ Jest unit & socket integration tests
-├── client-mobile/             # Expo React Native App (iOS/Android)
-└── client-cli/                # CLI testing client
+│   │   ├── ai/            # Bot logic & heuristics
+│   │   ├── game/          # Core game engine (State Machine)
+│   │   └── network/       # WebSocket server & Redis RoomStore
+│   └── tests/             # Extensive Jest test suite (75+ tests)
+├── client-mobile/         # Expo React Native App (iOS/Android)
+└── client-cli/            # Developer CLI tool for testing
 ```
 
 ---
@@ -77,62 +65,59 @@ JokerTrap/
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js v18+
-- npm
-- (Optional) Expo CLI for Mobile app
+- **Node.js** v18+
+- **Redis** (Local or Cloud instance)
+- **Expo CLI** (for mobile development)
 
-### Run the Server locally
+### 1. Setup the Server
 ```bash
 cd server
 npm install
+# Create a .env file with your REDIS_URL
 npm start
 ```
-*The server is also fully configured for cloud deployment (e.g. Render) via `wss://`.*
 
-### Connect a local CLI client
+### 2. Setup the Mobile App
 ```bash
-node client/cli-client.js
+cd client-mobile
+npm install
+npx expo start
 ```
-*(You will be prompted to create or join a room).*
 
 ---
 
-## 🧪 Tests
+## 📦 Deployment & Export (EAS Build)
+
+The mobile app uses **EAS Build** for cloud-based compilation (no Mac required for iOS).
+
+### 🤖 Android (APK/AAB)
+- **Generate APK (for sharing/testing):**
+  ```bash
+  eas build --platform android --profile preview
+  ```
+- **Generate AAB (for Google Play):**
+  ```bash
+  eas build --platform android --profile production
+  ```
+
+### 🍎 iOS (TestFlight)
+*Requires an Apple Developer Account ($99/year).*
+- **Build & Submit:**
+  ```bash
+  eas build --platform ios
+  ```
+- **Sharing via TestFlight:** After the build completes, use `eas submit` to send it to App Store Connect, then invite testers via their Apple ID.
+
+---
+
+## 🧪 Testing
+
+The project maintains a high standard of reliability with over 75+ integration tests.
 
 ```bash
 cd server
 npm test
 ```
-
-**75+ integrated tests** covering:
-- **Core game logic:** Deck building, shuffle, deal correctness, quad validation.
-- **State Machine:** All 7 protocol phase transitions and rejection of unauthorized actions.
-- **Bot Heuristics:** Tests ensuring logic for safe offerings, singleton hoarding, and Joker caching.
-- **Socket Integration:** Full WebSocket network simulation checking Room creations, `restart_game` synchronisation, and graceful Bot handover flows.
-
----
-
-## 🌐 WebSocket Protocol
-
-### Client → Server
-
-| Event | Payload |
-|---|---|
-| `create_room` | `{ botCount: number }` |
-| `join_room` | `{ roomId: string }` |
-| `restart_game` | `{}` |
-| `request_card` | `{ rank: "J" \| "Q" \| "K" \| "A" }` |
-| `offer_card` | `{ cardIndex: number }` |
-| `make_decision` | `{ decision: "accept" \| "reject" \| "accept_first" \| "accept_second" \| "force_third" }` |
-
-### Server → Client
-
-| Event | Recipient | Description |
-|---|---|---|
-| `room_created` / `room_joined` | Event caller | Confirmation of room ID |
-| `waiting` | Connecting players | Waiting room messages (e.g. waiting for restarts) |
-| `game_update` | All | Broadcasts the updated turn phase, who is acting, and the player's literal hand. |
-| `game_over` | All | Final hands, winner IDs, loser ID |
 
 ---
 
