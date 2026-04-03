@@ -1,42 +1,21 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Card } from './Card';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { styles as gameStyles, theme } from '../../styles/gameStyles';
 
 /**
  * Props for the TableArea component.
  */
 interface TableAreaProps {
-    /** Array of face-down table cards. Each element is `null`; we only track quantity. */
     tableCards: any[];
-    /** Global status message string displayed to all players. */
     gameMessage: string;
-    /** Active turn object from `useGameSocket` (phase, sender, receiver). */
     currentTurn: any;
-    /** True if the local player is the receiver and must choose accept/reject. */
     isDecisionPhase: boolean;
-    /** Hides decision buttons while the game-over modal is active. */
     gameOver: boolean;
-    /** Called when the player taps a face-down table card (implicitly accepts it). */
     onTableCardPress: (index: number) => void;
-    /** Called when the player taps an inline decision button ('reject'|'force_third'). */
     onDecision: (decision: string) => void;
+    myPlayerId?: number | null;
 }
 
-/**
- * The central game board area.
- *
- * Renders three layers of content:
- *  1. **Table cards** — face-down cards placed by the sender, displayed in a row.
- *     Tapping a card triggers `onTableCardPress(index)` which the parent maps to an
- *     accept decision.
- *  2. **Inline decision buttons** — shown only to the receiver during decision phases:
- *       - `waiting_for_first_decision`: an "Ask Another" button (reject offer 1).
- *       - `waiting_for_second_decision`: a "Force 3rd" button (force the sender's 3rd card).
- *  3. **Message box** — an always-visible status area with the latest `gameMessage`
- *     and turn info (sender/receiver IDs). Rendered with `pointerEvents="none"`
- *     so it never blocks taps on the cards beneath it.
- */
 export const TableArea: React.FC<TableAreaProps> = ({
     tableCards,
     gameMessage,
@@ -44,8 +23,40 @@ export const TableArea: React.FC<TableAreaProps> = ({
     isDecisionPhase,
     gameOver,
     onTableCardPress,
-    onDecision
+    onDecision,
+    myPlayerId = null
 }) => {
+    const getDynamicStyle = () => {
+        if (myPlayerId === null || currentTurn.sender === -1 || currentTurn.receiver === -1 || currentTurn.phase === 'lobby') {
+            return {};
+        }
+
+        const s = currentTurn.sender;
+        const r = currentTurn.receiver;
+
+        const B = myPlayerId;
+        const L = (myPlayerId + 1) % 4;
+        const T = (myPlayerId + 2) % 4;
+        const R = (myPlayerId + 3) % 4;
+
+        // Fixed positions: On the "left side" of the player who offers, angled diagonally.
+        // Extremely simple, robust, no receiver logic.
+        if (s === B) {
+            return { bottom: '35%', left: '25%', transform: [{ rotate: '-30deg' }] } as any;
+        }
+        if (s === T) {
+            return { top: '35%', right: '25%', transform: [{ rotate: '150deg' }] } as any;
+        }
+        if (s === L) {
+            return { bottom: '35%', left: '15%', transform: [{ rotate: '60deg' }] } as any;
+        }
+        if (s === R) {
+            return { top: '35%', right: '15%', transform: [{ rotate: '-120deg' }] } as any;
+        }
+
+        return {};
+    };
+
     return (
         <View style={styles.container} pointerEvents="box-none">
             {/* Global Message Box */}
@@ -59,7 +70,7 @@ export const TableArea: React.FC<TableAreaProps> = ({
             </View>
 
             {/* Table Cards */}
-            <View style={styles.cardsRowCenter}>
+            <View style={[styles.cardsRowCenter, getDynamicStyle()]}>
                 {tableCards.map((_, i) => (
                     <TouchableOpacity
                         key={`table-${i}`}
@@ -67,39 +78,41 @@ export const TableArea: React.FC<TableAreaProps> = ({
                         activeOpacity={0.8}
                         style={{ zIndex: i }}
                     >
-                        <Card
-                            card={null} // Table cards are face-down
+                        <Image
+                            source={i === 0 ? require('../../Resources/Card_Back_1.png') : require('../../Resources/Card_Back_2.png')}
                             style={{
                                 width: 55,
                                 height: 80,
+                                resizeMode: 'contain',
+                                borderRadius: 8,
                                 transform: [{ rotate: i % 2 === 0 ? '-5deg' : '5deg' }]
                             }}
                         />
                     </TouchableOpacity>
                 ))}
-
-                {/* Inline Action Buttons for Receiver */}
-                {!gameOver && isDecisionPhase && (
-                    <View style={styles.inlineActions}>
-                        {currentTurn.phase === 'waiting_for_first_decision' && (
-                            <TouchableOpacity
-                                style={[gameStyles.actionButton, gameStyles.rejectBtn]}
-                                onPress={() => onDecision('reject')}
-                            >
-                                <Text style={gameStyles.actionBtnText}>Ask Another</Text>
-                            </TouchableOpacity>
-                        )}
-                        {currentTurn.phase === 'waiting_for_second_decision' && (
-                            <TouchableOpacity
-                                style={[gameStyles.actionButton, styles.forceBtn]}
-                                onPress={() => onDecision('force_third')}
-                            >
-                                <Text style={gameStyles.actionBtnText}>Force 3rd</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                )}
             </View>
+
+            {/* Inline Action Buttons for Receiver */}
+            {!gameOver && isDecisionPhase && (
+                <View style={styles.decisionContainer}>
+                    {currentTurn.phase === 'waiting_for_first_decision' && (
+                        <TouchableOpacity
+                            style={[gameStyles.actionButton, gameStyles.rejectBtn]}
+                            onPress={() => onDecision('reject')}
+                        >
+                            <Text style={gameStyles.actionBtnText}>Ask Another</Text>
+                        </TouchableOpacity>
+                    )}
+                    {currentTurn.phase === 'waiting_for_second_decision' && (
+                        <TouchableOpacity
+                            style={[gameStyles.actionButton, styles.forceBtn]}
+                            onPress={() => onDecision('force_third')}
+                        >
+                            <Text style={gameStyles.actionBtnText}>Force 3rd</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            )}
         </View>
     );
 };
@@ -116,12 +129,18 @@ const styles = StyleSheet.create({
         top: '40%',
         alignSelf: 'center',
         flexDirection: 'row',
+        direction: 'ltr', // explicitly force LTR visual ordering for the tilted cards
         alignItems: 'center',
         justifyContent: 'center',
         height: 100,
     },
-    inlineActions: {
-        marginLeft: 20,
+    decisionContainer: {
+        position: 'absolute',
+        top: '40%', // Renders purely in the center area, completely unrotated!
+        alignSelf: 'center',
+        flexDirection: 'row',
+        direction: 'ltr',
+        zIndex: 10,
     },
     forceBtn: {
         backgroundColor: '#6c757d',

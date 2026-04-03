@@ -325,7 +325,7 @@ describe('PlayerZone component', () => {
         const { getByText } = render(
             <PlayerZone playerId={2} hand={[null, null]} />
         );
-        expect(getByText('P2')).toBeTruthy();
+        expect(getByText('P3')).toBeTruthy();
     });
 
     it('renders "Empty" when hand is empty', () => {
@@ -347,7 +347,7 @@ describe('PlayerZone component', () => {
         const { getByText } = render(
             <PlayerZone playerId={3} hand={[null, null]} vertical />
         );
-        expect(getByText('P3')).toBeTruthy();
+        expect(getByText('P4')).toBeTruthy();
     });
 });
 

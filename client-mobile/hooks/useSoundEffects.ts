@@ -14,6 +14,8 @@ export const useSoundEffects = () => {
     const laughRef  = useRef<Audio.Sound | null>(null);
     const winRef    = useRef<Audio.Sound | null>(null);
     const loseRef   = useRef<Audio.Sound | null>(null);
+    const startRef  = useRef<Audio.Sound | null>(null);
+    const leaveRef  = useRef<Audio.Sound | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -42,17 +44,31 @@ export const useSoundEffects = () => {
                 { shouldPlay: false }
             );
 
+            const { sound: start } = await Audio.Sound.createAsync(
+                require('../assets/sounds/game-start.mp3'),
+                { shouldPlay: false }
+            );
+
+            const { sound: leave } = await Audio.Sound.createAsync(
+                require('../assets/sounds/game-over.mp3'),
+                { shouldPlay: false }
+            );
+
             if (mounted) {
                 flipRef.current  = flip;
                 laughRef.current = laugh;
                 winRef.current = win;
                 loseRef.current = lose;
+                startRef.current = start;
+                leaveRef.current = leave;
             } else {
                 // Component unmounted before load finished — clean up immediately.
                 await flip.unloadAsync();
                 await laugh.unloadAsync();
                 await win.unloadAsync();
                 await lose.unloadAsync();
+                await start.unloadAsync();
+                await leave.unloadAsync();
             }
         };
 
@@ -64,6 +80,8 @@ export const useSoundEffects = () => {
             laughRef.current?.unloadAsync();
             winRef.current?.unloadAsync();
             loseRef.current?.unloadAsync();
+            startRef.current?.unloadAsync();
+            leaveRef.current?.unloadAsync();
         };
     }, []);
 
@@ -113,5 +131,27 @@ export const useSoundEffects = () => {
         }
     }, []);
 
-    return { playFlip, playLaugh, playWin, playLose };
+    const playStart = useCallback(async () => {
+        try {
+            if (startRef.current) {
+                await startRef.current.setPositionAsync(0);
+                await startRef.current.playAsync();
+            }
+        } catch (e) {
+            console.warn('playStart error', e);
+        }
+    }, []);
+
+    const playLeaveAlert = useCallback(async () => {
+        try {
+            if (leaveRef.current) {
+                await leaveRef.current.setPositionAsync(0);
+                await leaveRef.current.playAsync();
+            }
+        } catch (e) {
+            console.warn('playLeaveAlert error', e);
+        }
+    }, []);
+
+    return { playFlip, playLaugh, playWin, playLose, playStart, playLeaveAlert };
 };

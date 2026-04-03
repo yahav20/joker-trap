@@ -50,7 +50,15 @@ export default function App() {
         receivedJoker, playersData,
     } = useGameSocket(params.action, params.roomId, params.bots, params.avatar, params.playerName);
 
-    const { playFlip, playLaugh, playWin, playLose } = useSoundEffects();
+    const { playFlip, playLaugh, playWin, playLose, playStart, playLeaveAlert } = useSoundEffects();
+
+    const prevPhaseRef = React.useRef<string>('lobby');
+    React.useEffect(() => {
+        if (prevPhaseRef.current === 'lobby' && currentTurn.phase !== 'lobby' && !gameOverPayload) {
+            playStart();
+        }
+        prevPhaseRef.current = currentTurn.phase;
+    }, [currentTurn.phase, gameOverPayload, playStart]);
 
     /** Fire the evil-laugh sound exactly once each time the Joker is received. */
     React.useEffect(() => {
@@ -160,6 +168,7 @@ export default function App() {
      * Confirms before leaving the game (via hardware back or UI back).
      */
     const handleLeaveGame = React.useCallback(() => {
+        playLeaveAlert();
         Alert.alert(
             "התנתקות מהמשחק",
             "האם אתה בטוח שאתה רוצה להתנתק מהמשחק?",
@@ -177,7 +186,7 @@ export default function App() {
             { cancelable: true }
         );
         return true; // prevent default back
-    }, [sendAction, router]);
+    }, [sendAction, router, playLeaveAlert]);
 
     React.useEffect(() => {
         const backHandler = BackHandler.addEventListener(
@@ -243,6 +252,7 @@ export default function App() {
                     gameOver={!!gameOverPayload}
                     onTableCardPress={handleTableChoice}
                     onDecision={handleDecisionAction}
+                    myPlayerId={myPlayerId}
                 />
 
                 {/* Local Player — pinned to bottom */}
