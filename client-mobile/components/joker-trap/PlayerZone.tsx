@@ -64,7 +64,8 @@ export const PlayerZone: React.FC<PlayerZoneProps> = ({
     isReceiver,
     vertical = false,
 }) => {
-    const labelString = playerName ? `${playerName} (P${playerId})` : `P${playerId}`;
+    const displayId = playerId !== null ? playerId + 1 : '?';
+    const labelString = playerName ? `${playerName} (P${displayId})` : `P${displayId}`;
     // Determine the highlight border/background based on turn role.
     const highlightStyle = isActive
         ? { borderColor: '#4da6ff', borderWidth: 2, borderRadius: 10, backgroundColor: 'rgba(77,166,255,0.2)' }

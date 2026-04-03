@@ -12,6 +12,8 @@ import { Audio } from 'expo-av';
 export const useSoundEffects = () => {
     const flipRef   = useRef<Audio.Sound | null>(null);
     const laughRef  = useRef<Audio.Sound | null>(null);
+    const winRef    = useRef<Audio.Sound | null>(null);
+    const loseRef   = useRef<Audio.Sound | null>(null);
 
     useEffect(() => {
         let mounted = true;
@@ -30,13 +32,27 @@ export const useSoundEffects = () => {
                 { shouldPlay: false }
             );
 
+            const { sound: win } = await Audio.Sound.createAsync(
+                require('../assets/sounds/winning.mp3'),
+                { shouldPlay: false }
+            );
+
+            const { sound: lose } = await Audio.Sound.createAsync(
+                require('../assets/sounds/violin-lose.mp3'),
+                { shouldPlay: false }
+            );
+
             if (mounted) {
                 flipRef.current  = flip;
                 laughRef.current = laugh;
+                winRef.current = win;
+                loseRef.current = lose;
             } else {
                 // Component unmounted before load finished — clean up immediately.
                 await flip.unloadAsync();
                 await laugh.unloadAsync();
+                await win.unloadAsync();
+                await lose.unloadAsync();
             }
         };
 
@@ -46,6 +62,8 @@ export const useSoundEffects = () => {
             mounted = false;
             flipRef.current?.unloadAsync();
             laughRef.current?.unloadAsync();
+            winRef.current?.unloadAsync();
+            loseRef.current?.unloadAsync();
         };
     }, []);
 
@@ -73,5 +91,27 @@ export const useSoundEffects = () => {
         }
     }, []);
 
-    return { playFlip, playLaugh };
+    const playWin = useCallback(async () => {
+        try {
+            if (winRef.current) {
+                await winRef.current.setPositionAsync(0);
+                await winRef.current.playAsync();
+            }
+        } catch (e) {
+            console.warn('playWin error', e);
+        }
+    }, []);
+
+    const playLose = useCallback(async () => {
+        try {
+            if (loseRef.current) {
+                await loseRef.current.setPositionAsync(0);
+                await loseRef.current.playAsync();
+            }
+        } catch (e) {
+            console.warn('playLose error', e);
+        }
+    }, []);
+
+    return { playFlip, playLaugh, playWin, playLose };
 };

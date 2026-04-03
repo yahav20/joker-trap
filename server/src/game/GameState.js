@@ -127,7 +127,7 @@ class GameState {
             ts.phase = PHASES.WAITING_FOR_FIRST_DECISION;
             receiver.send("decision_needed", {
                 offerNumber: 1,
-                message: "Sender offered a hidden card. [A]ccept or [R]eject?",
+                message: "Sender offered a hidden card. Accept or Ask Another?",
             });
         } else if (ts.phase === PHASES.WAITING_FOR_SECOND_OFFER) {
             ts.phase = PHASES.WAITING_FOR_SECOND_DECISION;

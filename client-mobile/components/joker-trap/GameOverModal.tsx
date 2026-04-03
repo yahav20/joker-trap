@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Card } from './Card';
@@ -33,9 +33,16 @@ interface GameOverModalProps {
  * when `payload` is null so there is no extra wrapper logic needed in the parent.
  */
 export const GameOverModal: React.FC<GameOverModalProps> = ({ payload, myPlayerId, onRestart }) => {
+    const router = useRouter();
+    const [isWaiting, setIsWaiting] = useState(false);
+
+    useEffect(() => {
+        if (payload) setIsWaiting(false);
+    }, [payload]);
+
     // Nothing to show until the server sends a game_over event.
     if (!payload) return null;
-    const router = useRouter();
+    
     // Determine the local player's outcome to choose the correct headline.
     const isMyLoss = payload.loserId === myPlayerId;
 
@@ -98,22 +105,29 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ payload, myPlayerI
                 </ScrollView>
 
                 {/* ── Action Row: Home ←  → Restart ── */}
-                <View style={styles.actionRow}>
-                    <TouchableOpacity
-                        style={[styles.btn, styles.homeBtn]}
-                        onPress={() => router.replace('/')}
-                        accessibilityLabel="Home"
-                    >
-                        <Text style={styles.btnText}>🏠</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.btn, styles.restartBtn]}
-                        onPress={onRestart}
-                        accessibilityLabel="Restart"
-                    >
-                        <Text style={styles.btnText}>↺</Text>
-                    </TouchableOpacity>
-                </View>
+                {isWaiting ? (
+                    <Text style={styles.waitingStatusText}>Waiting for other players to hit Restart...</Text>
+                ) : (
+                    <View style={styles.actionRow}>
+                        <TouchableOpacity
+                            style={[styles.btn, styles.homeBtn]}
+                            onPress={() => router.replace('/')}
+                            accessibilityLabel="Home"
+                        >
+                            <Text style={styles.btnText}>🏠</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.btn, styles.restartBtn]}
+                            onPress={() => {
+                                setIsWaiting(true);
+                                onRestart();
+                            }}
+                            accessibilityLabel="Restart"
+                        >
+                            <Text style={styles.btnText}>↺ Play Again</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
 
             </View>
         </View>
@@ -250,5 +264,13 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: 'bold',
         letterSpacing: 0.5,
+    },
+    waitingStatusText: {
+        color: '#FFD700',
+        fontSize: 16,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginTop: 18,
+        marginBottom: 10,
     },
 });

@@ -185,6 +185,37 @@ async function startGame(roomState) {
     const roomId = roomState.id;
     let outgoingEvents = [];
 
+    // --- SEATING SHUFFLE ---
+    const { localClients } = require("./broadcast");
+    const seatIds = [0, 1, 2, 3];
+    for (let i = seatIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [seatIds[i], seatIds[j]] = [seatIds[j], seatIds[i]];
+    }
+
+    const humanIds = new Set();
+    const oldToNew = [];
+    roomState.clientsInfo.forEach((c, index) => {
+        const newId = seatIds[index];
+        oldToNew.push({ oldId: c.playerId, newId });
+        c.playerId = newId;
+        humanIds.add(newId);
+    });
+
+    for (const mapping of oldToNew) {
+        for (const ws of localClients) {
+            if (ws.roomId === roomId && ws.playerId === mapping.oldId) {
+                if (!ws._shuffled) {
+                    ws.playerId = mapping.newId;
+                    ws._shuffled = true;
+                }
+            }
+        }
+    }
+    for (const ws of localClients) {
+        if (ws.roomId === roomId) delete ws._shuffled;
+    }
+
     const allAdapters = [];
     for (let id = 0; id < PLAYER_COUNT; id++) {
         allAdapters.push({
@@ -199,13 +230,12 @@ async function startGame(roomState) {
 
     // Initialise bots
     const botInstances = [];
-    const humanIds = new Set(roomState.clientsInfo.map(c => c.playerId));
-
     for (let botId = 0; botId < PLAYER_COUNT; botId++) {
         if (!humanIds.has(botId)) {
             const diff = 'hard';
             const bot = new BotAdapter(botId, diff, 0.25, PLAYER_COUNT, roomId);
             bot.avatar = getRandomAvatar();
+            bot.playerName = 'Bot ' + botId;
             botInstances.push(bot);
         }
     }
@@ -218,7 +248,6 @@ async function startGame(roomState) {
 
     game.start("Game started!");
 
-    // Relay startup events to bots immediately
     relayEventsToBots(outgoingEvents, botInstances);
 
     roomState.gameData = game.toJSON();
@@ -226,17 +255,16 @@ async function startGame(roomState) {
 
     await saveRoomState(roomId, roomState, true);
 
-    // Broadcast players update so clients know bot avatars
     const players = [];
     roomState.clientsInfo.forEach(c => {
-        players.push({ id: c.playerId, avatar: c.avatar || 'blackandwhite_joker', isBot: false });
+        players.push({ id: c.playerId, avatar: c.avatar || 'blackandwhite_joker', name: c.playerName || 'Player ' + c.playerId, isBot: false });
     });
     roomState.botsConfig.forEach(b => {
-        players.push({ id: b.id, avatar: b.avatar || 'blackandwhite_joker', isBot: true });
+        players.push({ id: b.id, avatar: b.avatar || 'blackandwhite_joker', name: b.playerName || 'Bot', isBot: true });
     });
+    // Let clients know everyone's name and avatars, especially post-shuffle!
     publishEvent(roomId, "room_players_update", { players });
 
-    // Publish to WebSocket clients
     for (const out of outgoingEvents) {
         publishEvent(roomId, out.event, out.payload, out.targetPlayerId);
     }

@@ -167,7 +167,7 @@ export default function HomeScreen() {
             <Modal visible={joinVisible} transparent animationType="fade" onRequestClose={() => setJoinVisible(false)}>
                 <KeyboardAvoidingView
                     style={styles.modalOverlay}
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 >
                     <View style={styles.smallModalBox}>
                         <Text style={styles.modalTitle}>Join Room</Text>
@@ -215,7 +215,7 @@ export default function HomeScreen() {
                 </View>
             </Modal>
 
-            <ProfilePicker 
+            <ProfilePicker
                 visible={pickerVisible}
                 currentProfile={profile}
                 onSave={saveProfile}

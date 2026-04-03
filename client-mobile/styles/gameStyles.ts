@@ -36,12 +36,12 @@ export const styles = StyleSheet.create({
     // Opponent Zones
     topZone: {
         position: 'absolute',
-        top: 20,
+        top: '2%',
         alignSelf: 'center',
     },
     leftZone: {
         position: 'absolute',
-        left: 10,
+        left: '2%',
         top: 0,
         bottom: 0,
         justifyContent: 'center',
@@ -49,7 +49,7 @@ export const styles = StyleSheet.create({
     },
     rightZone: {
         position: 'absolute',
-        right: 10,
+        right: '2%',
         top: 0,
         bottom: 0,
         justifyContent: 'center',
@@ -57,7 +57,7 @@ export const styles = StyleSheet.create({
     },
     bottomZone: {
         position: 'absolute',
-        bottom: 10,
+        bottom: '2%',
         alignSelf: 'center',
     },
     // Hands & Cards

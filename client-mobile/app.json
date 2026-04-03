@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Joker Trap",
-    "slug": "Joker Trap",
+    "slug": "joker-trap",
     "version": "1.0.0",
     "orientation": "landscape",
     "icon": "./assets/images/icon.png",
@@ -12,8 +12,9 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.yahav.jokertrap",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1A1A1A",
         "foregroundImage": "./assets/images/icon.png"
       },
       "edgeToEdgeEnabled": true,
@@ -29,18 +30,21 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/icon.png",
-          "imageWidth": 200,
+          "imageWidth": 250,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#000000"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0b597df6-1d36-4fb1-8c36-c05843ce405a"
+      }
     }
   }
 }

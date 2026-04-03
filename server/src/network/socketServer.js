@@ -98,7 +98,7 @@ function startServer(port = PORT) {
 
         ws.on("close", async () => {
             localClients.delete(ws);
-            if (ws.roomId) {
+            if (ws.roomId && !ws.leaving) {
                 await handleDisconnect(ws);
             }
         });

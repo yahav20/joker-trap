@@ -50,7 +50,7 @@ export default function App() {
         receivedJoker, playersData,
     } = useGameSocket(params.action, params.roomId, params.bots, params.avatar, params.playerName);
 
-    const { playFlip, playLaugh } = useSoundEffects();
+    const { playFlip, playLaugh, playWin, playLose } = useSoundEffects();
 
     /** Fire the evil-laugh sound exactly once each time the Joker is received. */
     React.useEffect(() => {
@@ -58,6 +58,17 @@ export default function App() {
             playLaugh();
         }
     }, [receivedJoker]);
+
+    /** Fire win/lose sounds when the game is over. */
+    React.useEffect(() => {
+        if (gameOverPayload && myPlayerId !== null) {
+            if (gameOverPayload.loserId === myPlayerId) {
+                playLose();
+            } else {
+                playWin();
+            }
+        }
+    }, [gameOverPayload, myPlayerId]);
 
     /**
      * Map player seat IDs to the three opponent UI positions.

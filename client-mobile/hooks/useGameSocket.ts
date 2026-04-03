@@ -251,27 +251,29 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                      * Also clears any stale game-over data if the round was restarted.
                      */
                     case 'game_update':
-                        setGameOverPayload(null); // Clear previous round result
-                        setMyPlayerId(payload.playerId);
-                        setMyHand(payload.yourHand);
-                        setCurrentTurn(payload.turn);
+                        if (payload.turn) {
+                            setGameOverPayload(null); // Clear previous round result
+                            setMyPlayerId(payload.playerId);
+                            setMyHand(payload.yourHand || []);
+                            setCurrentTurn(payload.turn);
 
-                        // We use the handSizes mapping broadcasted by the server.
-                        const activeOpponents = [];
-                        for (let i = 1; i < 4; i++) {
-                            const oId = (payload.playerId + i) % 4;
-                            const count = payload.handSizes ? payload.handSizes[oId] : 4;
-                            activeOpponents.push({ id: oId, handCount: count });
-                        }
-                        setOpponents(activeOpponents);
+                            // We use the handSizes mapping broadcasted by the server.
+                            const activeOpponents = [];
+                            for (let i = 1; i < 4; i++) {
+                                const oId = (payload.playerId + i) % 4;
+                                const count = payload.handSizes ? payload.handSizes[oId] : 4;
+                                activeOpponents.push({ id: oId, handCount: count });
+                            }
+                            setOpponents(activeOpponents);
 
-                        // Sync the count of visible (face-down) table cards.
-                        if (payload.tableCount !== undefined) {
-                            setTableCards(Array(payload.tableCount).fill(null));
+                            // Sync the count of visible (face-down) table cards.
+                            if (payload.tableCount !== undefined) {
+                                setTableCards(Array(payload.tableCount).fill(null));
+                            }
                         }
 
                         if (payload.message) setGameMessage(payload.message);
-                        else if (payload.turn.phase === 'waiting_for_request') {
+                        else if (payload.turn && payload.turn.phase === 'waiting_for_request') {
                             setGameMessage(`Player ${payload.turn.receiver} is requesting...`);
                         }
                         break;
@@ -458,7 +460,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
             console.error('WS Error:', e);
             setGameMessage('Connection error.');
         };
-    }, []);
+    }, [action, avatarParam, botsParam, playerNameParam, roomIdParam]);
 
     /**
      * Mounts the WebSocket on first render and closes it on unmount.

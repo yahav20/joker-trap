@@ -48,6 +48,16 @@ export const TableArea: React.FC<TableAreaProps> = ({
 }) => {
     return (
         <View style={styles.container} pointerEvents="box-none">
+            {/* Global Message Box */}
+            <View pointerEvents="none" style={styles.messageContainer}>
+                <View style={styles.messageBox}>
+                    <Text style={styles.messageText}>{gameMessage}</Text>
+                    <Text style={styles.turnInfoText}>
+                        Sender: P{currentTurn.sender} | Receiver: P{currentTurn.receiver}
+                    </Text>
+                </View>
+            </View>
+
             {/* Table Cards */}
             <View style={styles.cardsRowCenter}>
                 {tableCards.map((_, i) => (
@@ -90,16 +100,6 @@ export const TableArea: React.FC<TableAreaProps> = ({
                     </View>
                 )}
             </View>
-
-            {/* Global Message Box */}
-            <View pointerEvents="none" style={styles.messageContainer}>
-                <View style={styles.messageBox}>
-                    <Text style={styles.messageText}>{gameMessage}</Text>
-                    <Text style={styles.turnInfoText}>
-                        Sender: P{currentTurn.sender} | Receiver: P{currentTurn.receiver}
-                    </Text>
-                </View>
-            </View>
         </View>
     );
 };
@@ -112,6 +112,9 @@ const styles = StyleSheet.create({
         zIndex: 2,
     },
     cardsRowCenter: {
+        position: 'absolute',
+        top: '40%',
+        alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -128,7 +131,7 @@ const styles = StyleSheet.create({
     },
     messageContainer: {
         position: 'absolute',
-        top: '35%',  // Centered vertically in the table zone
+        top: '25%',
         alignSelf: 'center',
     },
     messageBox: {
