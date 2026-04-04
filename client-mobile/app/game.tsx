@@ -264,21 +264,21 @@ export default function App() {
                 {/* ── Opponents ────────────────────────────────────────────── */}
                 <View style={gameStyles.topZone}>
                     <View style={{ position: 'relative' }}>
-                        <ChatBubble messageId={topOppId !== null ? (chatBubbles[topOppId] ?? null) : null} />
+                        <ChatBubble messageId={topOppId !== null ? (chatBubbles[topOppId] ?? null) : null} position="left" />
                         <PlayerZone playerId={topOppId} hand={topHand} avatar={topAvatar} playerName={topName} rotation="180deg" isActive={currentTurn.sender === topOppId} isReceiver={currentTurn.receiver === topOppId} />
                     </View>
                 </View>
 
                 <View style={gameStyles.leftZone}>
                     <View style={{ position: 'relative' }}>
-                        <ChatBubble messageId={leftOppId !== null ? (chatBubbles[leftOppId] ?? null) : null} />
+                        <ChatBubble messageId={leftOppId !== null ? (chatBubbles[leftOppId] ?? null) : null} position="left" />
                         <PlayerZone playerId={leftOppId} hand={leftHand} avatar={leftAvatar} playerName={leftName} vertical isActive={currentTurn.sender === leftOppId} isReceiver={currentTurn.receiver === leftOppId} />
                     </View>
                 </View>
 
                 <View style={gameStyles.rightZone}>
                     <View style={{ position: 'relative' }}>
-                        <ChatBubble messageId={rightOppId !== null ? (chatBubbles[rightOppId] ?? null) : null} />
+                        <ChatBubble messageId={rightOppId !== null ? (chatBubbles[rightOppId] ?? null) : null} position="left" />
                         <PlayerZone playerId={rightOppId} hand={rightHand} avatar={rightAvatar} playerName={rightName} vertical isActive={currentTurn.sender === rightOppId} isReceiver={currentTurn.receiver === rightOppId} />
                     </View>
                 </View>

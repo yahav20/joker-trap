@@ -25,14 +25,15 @@ export const QUICK_CHAT_LABELS: Record<number, string> = {
 interface ChatBubbleProps {
     /** Numeric quick-chat ID. null / 0 means hidden. */
     messageId: number | null;
+    /** Where the bubble appears relative to its position:relative container. */
+    position?: 'top' | 'left' | 'top-left';
 }
 
 /**
  * A speech-bubble that fades in when a messageId arrives and auto-fades
- * out after 3.5 seconds. The parent is responsible for clearing the
- * messageId state after the bubble has finished (it won't block new messages).
+ * out after 3.5 seconds.
  */
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ messageId }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ messageId, position = 'top' }) => {
     const opacity = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -59,9 +60,24 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ messageId }) => {
 
     if (!messageId) return null;
 
+    const bubbleStyle = [
+        styles.bubble,
+        position === 'top' && styles.bubbleTop,
+        position === 'left' && styles.bubbleLeft,
+        position === 'top-left' && styles.bubbleTopLeft,
+        { opacity }
+    ];
+
+    const tailStyle = [
+        styles.tail,
+        position === 'top' && styles.tailBottomCenter,
+        position === 'left' && styles.tailRightCenter,
+        position === 'top-left' && styles.tailBottomLeft,
+    ];
+
     return (
-        <Animated.View style={[styles.bubble, { opacity }]} pointerEvents="none">
-            <View style={styles.tail} />
+        <Animated.View style={bubbleStyle} pointerEvents="none">
+            <View style={tailStyle} />
             <Text style={styles.text}>{QUICK_CHAT_LABELS[messageId] ?? '...'}</Text>
         </Animated.View>
     );
@@ -70,8 +86,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ messageId }) => {
 const styles = StyleSheet.create({
     bubble: {
         position: 'absolute',
-        bottom: '100%',
-        alignSelf: 'center',
         backgroundColor: 'rgba(30, 30, 60, 0.92)',
         borderRadius: 12,
         paddingHorizontal: 10,
@@ -80,15 +94,52 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.25)',
         minWidth: 90,
         alignItems: 'center',
-        marginBottom: 6,
         zIndex: 500,
+    },
+    bubbleTop: {
+        bottom: '110%',
+        alignSelf: 'center',
+        marginBottom: 6,
+    },
+    bubbleLeft: {
+        right: '110%',
+        top: '10%',
+        marginRight: 6,
+    },
+    bubbleTopLeft: {
+        bottom: '110%',
+        left: -10,
+        marginBottom: 6,
     },
     tail: {
         position: 'absolute',
-        bottom: -7,
-        alignSelf: 'center',
         width: 0,
         height: 0,
+    },
+    tailBottomCenter: {
+        bottom: -7,
+        alignSelf: 'center',
+        borderLeftWidth: 7,
+        borderRightWidth: 7,
+        borderTopWidth: 7,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderTopColor: 'rgba(30, 30, 60, 0.92)',
+    },
+    tailRightCenter: {
+        right: -7,
+        top: '50%',
+        marginTop: -7,
+        borderTopWidth: 7,
+        borderBottomWidth: 7,
+        borderLeftWidth: 7,
+        borderTopColor: 'transparent',
+        borderBottomColor: 'transparent',
+        borderLeftColor: 'rgba(30, 30, 60, 0.92)',
+    },
+    tailBottomLeft: {
+        bottom: -7,
+        left: 20,
         borderLeftWidth: 7,
         borderRightWidth: 7,
         borderTopWidth: 7,

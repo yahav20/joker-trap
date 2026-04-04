@@ -43,7 +43,7 @@ const AVATAR_KEYS = [
  * How long (ms) a player has to act before the server auto-plays on their behalf.
  * Stored here so it can be tuned in one place. Sent as `deadline` in game_update.
  */
-const TURN_TIMEOUT_MS = 20000;
+const TURN_TIMEOUT_MS = 30000;
 
 /**
  * Valid quick-chat message IDs.

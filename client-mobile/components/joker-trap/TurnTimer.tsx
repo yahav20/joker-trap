@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing } from 'react-native-reanimated';
 
 /** Duration that was set on the server — used only for display math. */
-const TURN_MS = 20000;
+const TURN_MS = 30000;
 
 /** Below this remaining-ms threshold the bar and text turn red. */
 const DANGER_THRESHOLD = 7000;
