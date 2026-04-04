@@ -36,61 +36,75 @@ function decideRequestAdvanced(hand, memory) {
     return sortedRanks[0];
 }
 
+// ─── Helper ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the index of the least-valuable non-Joker card in the hand.
+ * "Least valuable" = the rank with the fewest copies (hard to complete a quad).
+ * Used as a decoy when the bot wants to stall or mislead.
+ */
+function _pickDecoy(hand) {
+    const counts = {};
+    hand.forEach(c => { if (c.rank !== "Joker") counts[c.rank] = (counts[c.rank] || 0) + 1; });
+    let bestIdx = -1, minCount = Infinity;
+    hand.forEach((c, i) => {
+        if (c.rank !== "Joker" && (counts[c.rank] || 0) < minCount) {
+            minCount = counts[c.rank] || 0;
+            bestIdx = i;
+        }
+    });
+    return bestIdx !== -1 ? bestIdx : 0;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Advanced Offer:
- * Avoid giving the receiver exactly what they asked for if it helps them win.
+ * When holding the Joker, use memory to determine the optimal offer-position
+ * (1, 2 or 3) at which this receiver is most likely to accept, and stall with
+ * decoys on all other positions.
+ *
+ * The bot improves across turns because:
+ *   - Every Joker placement is annotated via memory.noteJokerPlaced().
+ *   - recordOffer() correlates the outcome (accepted / rejected) back to that
+ *     placement and stores it in jokerPassAttempts.
+ *   - suggestJokerPosition() scores positions 1–3 and avoids known failures.
  */
 function decideOfferAdvanced(hand, memory, receiverId, requestedRank, bluffChance, offerNum) {
     const jokerIndex = hand.findIndex(c => c.rank === "Joker");
     const hasJoker = jokerIndex !== -1;
 
     if (hasJoker) {
-        const likelyOffer = memory.getReceiverLikelyOfferNum(receiverId) || 1;
-
-        // Always place Joker on the 3rd forced offer
-        if (offerNum === 3) return jokerIndex;
-
-        // If this is the offer they usually take, offer the Joker!
-        // Introduce slight randomness so we aren't 100% predictable
-        if (offerNum === likelyOffer || Math.random() < bluffChance) {
+        // offerNum 3 is forced — the bot must surrender a card. Always the Joker.
+        if (offerNum === 3) {
+            memory.noteJokerPlaced(receiverId, 3);
             return jokerIndex;
         }
 
-        // Otherwise, send a decoy (least valuable non-Joker)
-        const counts = {};
-        hand.forEach(c => { if (c.rank !== "Joker") counts[c.rank] = (counts[c.rank] || 0) + 1; });
-        let bestIdx = -1;
-        let minCount = Infinity;
-        hand.forEach((c, i) => {
-            if (c.rank !== "Joker" && (counts[c.rank] || 0) < minCount) {
-                minCount = counts[c.rank] || 0;
-                bestIdx = i;
-            }
-        });
-        return bestIdx !== -1 ? bestIdx : 0;
-    }
+        // Ask memory: which position (1-3) is this receiver most likely to accept?
+        // The suggestion learns from general acceptance patterns AND Joker-specific
+        // success/failure history, so it adapts after every failed pass attempt.
+        const targetPosition = memory.suggestJokerPosition(receiverId);
 
-    // --- Cooperative block: We DON'T have the Joker ---
-    // If we have the requested rank, GIVE it to them to help them win!
-    const requestedIndex = hand.findIndex(c => c.rank === requestedRank);
-    if (requestedIndex !== -1) {
-        return requestedIndex;
-    }
-
-    // Otherwise, offer the least valuable overall (decoy)
-    const counts = {};
-    hand.forEach(c => { if (c.rank !== "Joker") counts[c.rank] = (counts[c.rank] || 0) + 1; });
-    let bestIdx = hand.findIndex(c => c.rank !== "Joker") || 0;
-    if (bestIdx === -1) return 0; // safely fallback
-
-    let minCount = counts[hand[bestIdx].rank] || Infinity;
-    for (let i = 0; i < hand.length; i++) {
-        if (hand[i].rank !== "Joker" && (counts[hand[i].rank] || Infinity) < minCount) {
-            minCount = counts[hand[i].rank];
-            bestIdx = i;
+        // Place the Joker if we've reached the target position.
+        // Also occasionally bluff (place it early) to stay unpredictable.
+        if (offerNum === targetPosition || Math.random() < bluffChance) {
+            memory.noteJokerPlaced(receiverId, offerNum);
+            return jokerIndex;
         }
+
+        // Not the right moment yet — send a decoy to stall.
+        return _pickDecoy(hand);
     }
-    return bestIdx;
+
+    // --- We DON'T have the Joker ---
+    // Cooperate: give the requested rank if we have it (helps them collect quads
+    // and keeps the Joker moving away from us).
+    const requestedIndex = hand.findIndex(c => c.rank === requestedRank);
+    if (requestedIndex !== -1) return requestedIndex;
+
+    // Otherwise send the least-valuable decoy.
+    return _pickDecoy(hand);
 }
 
 /**

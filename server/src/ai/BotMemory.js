@@ -29,6 +29,23 @@ class BotMemory {
             this.receiverDecisionHistory.set(i, []);
         }
 
+        /**
+         * Per-player Joker pass history: tracks which offer position the bot tried
+         * to pass the Joker at and whether the receiver accepted it.
+         * @type {Map<number, Array<{offerNum: number, success: boolean, round: number}>>}
+         */
+        this.jokerPassAttempts = new Map();
+        for (let i = 0; i < playerCount; i++) {
+            this.jokerPassAttempts.set(i, []);
+        }
+
+        /**
+         * Tracks the most recent Joker offer placed by the bot, so the outcome
+         * (accepted / rejected) can be correlated to the correct offer position.
+         * @type {{ receiverId: number, offerNum: number } | null}
+         */
+        this.pendingJokerOffer = null;
+
         /** @type {Array<Object>} */
         this.eventLog = [];
 
@@ -141,6 +158,19 @@ class BotMemory {
             this._adjustSuspicion(senderId, 0.02 * offerNum);
         }
 
+        // Correlate with a pending Joker pass attempt to record its outcome.
+        if (
+            this.pendingJokerOffer &&
+            this.pendingJokerOffer.receiverId === receiverId &&
+            this.pendingJokerOffer.offerNum === offerNum
+        ) {
+            const attempts = this.jokerPassAttempts.get(receiverId) || [];
+            attempts.push({ offerNum, success: accepted, round: this.round });
+            if (attempts.length > 10) attempts.shift();
+            this.jokerPassAttempts.set(receiverId, attempts);
+            this.pendingJokerOffer = null;
+        }
+
         this._normaliseSuspicion();
     }
 
@@ -202,6 +232,58 @@ class BotMemory {
     /** Call at the start of each new turn (after _advanceTurn). */
     advanceRound() {
         this.round++;
+    }
+
+    /**
+     * Called by the bot immediately after placing the Joker at a specific offer
+     * position, so the outcome can later be correlated in recordOffer.
+     *
+     * @param {number} receiverId
+     * @param {number} offerNum  1, 2, or 3
+     */
+    noteJokerPlaced(receiverId, offerNum) {
+        this.pendingJokerOffer = { receiverId, offerNum };
+    }
+
+    /**
+     * Suggests the best offer-position (1, 2, or 3) at which to place the Joker
+     * for a given receiver.
+     *
+     * Scoring is based on two signals:
+     *   1. **General acceptance pattern** — which positions this player tends to
+     *      accept cards at in normal play (from receiverDecisionHistory).
+     *   2. **Joker-specific outcomes** — positions where a Joker pass previously
+     *      succeeded are rewarded; positions where it failed are penalised.
+     *
+     * When there is no history for a position its score remains 0, so the bot
+     * will explore all positions before settling on a preference.
+     *
+     * @param {number} receiverId
+     * @returns {number}  1, 2, or 3
+     */
+    suggestJokerPosition(receiverId) {
+        const generalHistory = this.receiverDecisionHistory.get(receiverId) || [];
+        const jokerHistory   = this.jokerPassAttempts.get(receiverId)      || [];
+
+        const score = { 1: 0, 2: 0, 3: 0 };
+
+        // Signal 1 – general acceptance pattern.
+        for (const n of generalHistory) {
+            if (n >= 1 && n <= 3) score[n] += 1.5;
+        }
+
+        // Signal 2 – Joker-specific outcomes.
+        for (const attempt of jokerHistory) {
+            if (attempt.offerNum >= 1 && attempt.offerNum <= 3) {
+                score[attempt.offerNum] += attempt.success ? 3 : -2;
+            }
+        }
+
+        // Return position with highest score.
+        let best = 1;
+        if (score[2] > score[best]) best = 2;
+        if (score[3] > score[best]) best = 3;
+        return best;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -285,7 +367,9 @@ class BotMemory {
             rankRequests: Array.from(this.rankRequests.entries()),
             confirmedJokerHolder: this.confirmedJokerHolder,
             knownRanks: Array.from(this.knownRanks.entries()).map(([k, v]) => [k, Array.from(v)]),
-            round: this.round
+            round: this.round,
+            jokerPassAttempts: Array.from(this.jokerPassAttempts.entries()),
+            pendingJokerOffer: this.pendingJokerOffer
         };
     }
 
@@ -299,6 +383,10 @@ class BotMemory {
         memory.confirmedJokerHolder = data.confirmedJokerHolder;
         memory.knownRanks = new Map(data.knownRanks.map(([k, v]) => [k, new Set(v)]));
         memory.round = data.round;
+        memory.jokerPassAttempts = data.jokerPassAttempts
+            ? new Map(data.jokerPassAttempts)
+            : new Map();
+        memory.pendingJokerOffer = data.pendingJokerOffer ?? null;
         return memory;
     }
 }
