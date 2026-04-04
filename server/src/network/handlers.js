@@ -7,7 +7,7 @@ const crypto = require("crypto");
 const GameState = require("../game/GameState");
 const BotAdapter = require("../ai/BotAdapter");
 const logger = require("../utils/logger");
-const { PLAYER_COUNT, AVATAR_KEYS } = require("../config/constant");
+const { PLAYER_COUNT, AVATAR_KEYS, QUICK_CHAT_COUNT } = require("../config/constant");
 const { generateRoomCode } = require("../utils/roomIdFormatter");
 const { acquireLock, releaseLock } = require("./locks");
 const { getRoomState, saveRoomState, deleteRoomState } = require("./roomStore");
@@ -21,22 +21,35 @@ function getRandomAvatar() {
 
 function broadcastPlayersUpdate(roomId, roomState) {
     const players = [];
-    roomState.clientsInfo.forEach(c => {
+    roomState.clientsInfo.forEach((c, index) => {
         players.push({
-            id: c.playerId,
+            id: c.playerId !== undefined ? c.playerId : index,
             avatar: c.avatar || 'blackandwhite_joker',
-            name: c.playerName || `P${c.playerId}`,
+            name: c.playerName || `Player ${index + 1}`,
             isBot: false,
         });
     });
-    roomState.botsConfig.forEach(b => {
-        players.push({
-            id: b.id,
-            avatar: b.avatar || 'blackandwhite_joker',
-            name: `Bot ${b.id}`,
-            isBot: true,
+    
+    if (roomState.botsConfig && roomState.botsConfig.length > 0) {
+        roomState.botsConfig.forEach(b => {
+            players.push({
+                id: b.id,
+                avatar: b.avatar || 'blackandwhite_joker',
+                name: b.playerName || `Bot`,
+                isBot: true,
+            });
         });
-    });
+    } else if (!roomState.gameData && roomState.botCount > 0) {
+        for (let i = 0; i < roomState.botCount; i++) {
+            players.push({
+                id: 10 + i,
+                avatar: 'robot_joker',
+                name: `Bot`,
+                isBot: true,
+            });
+        }
+    }
+    
     publishEvent(roomId, "room_players_update", { players });
 }
 
@@ -222,6 +235,23 @@ async function handleGameAction(ws, event, payload) {
     await executeActionOnRoom(ws.roomId, ws.playerId, event, payload);
 }
 
+/**
+ * Handles a quick-chat message from a client.
+ * Fire-and-forget: validates the message ID and broadcasts it to the room.
+ * No lock is needed — pure broadcast, zero state mutation.
+ */
+function handleChatMessage(ws, payload) {
+    if (!ws.roomId) return;
+    const messageId = parseInt(payload.messageId, 10);
+    if (isNaN(messageId) || messageId < 1 || messageId > QUICK_CHAT_COUNT) {
+        return sendError(ws, `Invalid chat messageId. Must be 1-${QUICK_CHAT_COUNT}.`);
+    }
+    publishEvent(ws.roomId, 'room_chat_broadcast', {
+        playerId: ws.playerId,
+        messageId,
+    });
+}
+
 // -----------------------------------------------------------------------------
 // DISCONNECT & BOT TAKEOVER
 // -----------------------------------------------------------------------------
@@ -265,6 +295,8 @@ async function handleDisconnect(ws) {
 
             roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== ws.playerId);
             roomState.botCount++;
+            await saveRoomState(roomId, roomState, true);
+            broadcastPlayersUpdate(roomId, roomState);
             await checkRoomRestart(roomState);
         }
 
@@ -338,28 +370,38 @@ async function handleLeaveRoom(ws) {
         
         if (otherConnectedHumans === 0) {
             logger.info(`Player explicitly left and is the last human in room ${roomId}. Deleting room.`);
-            publishEvent(roomId, "game_over", { loserId: ws.playerId, winnerIds: [] });
+            if (roomState.gameData && !roomState.gameData.over) {
+                publishEvent(roomId, "game_over", { loserId: ws.playerId, winnerIds: [] });
+            }
             await deleteRoomState(roomId);
             ws.roomId = null;
         } else {
-            logger.info(`Player ${ws.playerId} explicitly left. Replacing with Bot immediately.`);
-            roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== ws.playerId);
-            roomState.botCount++;
+            if (roomState.gameData && !roomState.gameData.over) {
+                logger.info(`Player ${ws.playerId} explicitly left. Replacing with Bot immediately.`);
+                roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== ws.playerId);
+                roomState.botCount++;
 
-            const bot = new BotAdapter(ws.playerId, 'hard', 0.25, PLAYER_COUNT, roomId);
-            bot.avatar = getRandomAvatar();
-            if (roomState.gameData) {
+                const bot = new BotAdapter(ws.playerId, 'hard', 0.25, PLAYER_COUNT, roomId);
+                bot.avatar = getRandomAvatar();
                 const savedPlayer = roomState.gameData.players.find(p => p.id === ws.playerId);
                 if (savedPlayer) bot.hand = savedPlayer.hand;
-            }
 
-            roomState.botsConfig.push(bot.toJSON());
-            BotAdapter.abortAll(roomId); 
-            
-            broadcastPlayersUpdate(roomId, roomState);
-            publishEvent(roomId, "game_update", { message: `Player explicitly left. A bot took over.` });
-            await executeActionOnRoom(roomId, ws.playerId, "RESUME_BOT", {}, false);
-            await saveRoomState(roomId, roomState, true);
+                roomState.botsConfig.push(bot.toJSON());
+                BotAdapter.abortAll(roomId); 
+                
+                broadcastPlayersUpdate(roomId, roomState);
+                publishEvent(roomId, "game_update", { message: `Player explicitly left. A bot took over.` });
+                await executeActionOnRoom(roomId, ws.playerId, "RESUME_BOT", {}, false);
+                await saveRoomState(roomId, roomState, true);
+            } else {
+                logger.info(`Player ${ws.playerId} explicitly left the lobby.`);
+                roomState.clientsInfo = roomState.clientsInfo.filter(c => c.playerId !== ws.playerId);
+                roomState.botCount++;
+                
+                await saveRoomState(roomId, roomState, true);
+                broadcastPlayersUpdate(roomId, roomState);
+                await checkRoomRestart(roomState);
+            }
         }
         
         // Remove room binding so handleDisconnect won't process them again if they close WS later
@@ -388,6 +430,7 @@ module.exports = {
     handleRestartGame,
     handleResumeRoom,
     handleGameAction,
+    handleChatMessage,
     handleDisconnect,
     handleLeaveRoom,
     clearAllBotTimeouts

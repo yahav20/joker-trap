@@ -128,6 +128,19 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
         currentTurnRef.current = currentTurn;
     }, [currentTurn]);
 
+    /**
+     * Unix-ms deadline for the current turn timer, received from the server.
+     * null when there is no active timer (lobby or game over).
+     */
+    const [turnDeadline, setTurnDeadline] = useState<number | null>(null);
+
+    /**
+     * Map of playerId → active quick-chat messageId.
+     * Entries are cleared after 3.5 s to match the ChatBubble animation.
+     */
+    const [chatBubbles, setChatBubbles] = useState<Record<number, number | null>>({});
+    const chatBubbleTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
     /** Session persistence for server crashes or network drops */
     const sessionTokenRef = useRef<string | null>(null);
     const roomIdRef = useRef<string | null>(roomIdParam || null);
@@ -270,11 +283,14 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                             if (payload.tableCount !== undefined) {
                                 setTableCards(Array(payload.tableCount).fill(null));
                             }
+
+                            // Sync turn deadline for the countdown bar.
+                            setTurnDeadline(payload.deadline ?? null);
                         }
 
                         if (payload.message) setGameMessage(payload.message);
                         else if (payload.turn && payload.turn.phase === 'waiting_for_request') {
-                            setGameMessage(`Player ${payload.turn.receiver} is requesting...`);
+                            setGameMessage(`Player ${payload.turn.receiver + 1} is requesting...`);
                         }
                         break;
 
@@ -290,7 +306,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                             requestedRank: payload.requestedRank,
                             phase: 'waiting_for_first_offer'
                         }));
-                        setGameMessage(payload.message || `Player ${payload.receiver || currentTurnRef.current.receiver} requested: ${payload.requestedRank}.`);
+                        setGameMessage(payload.message || `Player ${(payload.receiver || currentTurnRef.current.receiver) + 1} requested: ${payload.requestedRank}.`);
                         break;
 
                     /**
@@ -405,7 +421,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                      * Setting `gameOverPayload` makes the GameOverModal appear.
                      */
                     case 'game_over':
-                        setGameMessage(`Game Over: Player ${payload.quadPlayer} completed a Quad!`);
+                        setGameMessage(`Game Over: Player ${payload.quadPlayer + 1} completed a Quad!`);
                         setGameOverPayload(payload);
                         break;
 
@@ -417,6 +433,24 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
                         setGameMessage(payload.message);
                         showToast(`Error: ${payload.message}`);
                         break;
+
+                    /**
+                     * 'room_chat_broadcast' — a player sent a quick-chat message.
+                     * Show their bubble for 3.5 s then clear it.
+                     */
+                    case 'room_chat_broadcast': {
+                        const { playerId: chatPlayerId, messageId } = payload;
+                        setChatBubbles(prev => ({ ...prev, [chatPlayerId]: messageId }));
+
+                        // Cancel any existing timer for this player and start a fresh one
+                        if (chatBubbleTimersRef.current[chatPlayerId]) {
+                            clearTimeout(chatBubbleTimersRef.current[chatPlayerId]);
+                        }
+                        chatBubbleTimersRef.current[chatPlayerId] = setTimeout(() => {
+                            setChatBubbles(prev => ({ ...prev, [chatPlayerId]: null }));
+                        }, 3500);
+                        break;
+                    }
                 }
             } catch (e) {
                 console.error('Failed to parse WS message', e);
@@ -510,6 +544,7 @@ export const useGameSocket = (action?: string, roomIdParam?: string, botsParam?:
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
         currentTurn, opponents, myPlayerId, sendAction, connected, roomCode,
         isReconnecting, receivedJoker, playersData,
+        turnDeadline, chatBubbles,
         reconnect: () => connect(false)
     };
 };

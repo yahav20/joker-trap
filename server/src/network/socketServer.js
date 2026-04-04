@@ -18,8 +18,10 @@ const {
     handleGameAction,
     handleDisconnect,
     handleLeaveRoom,
+    handleChatMessage,
     clearAllBotTimeouts
 } = require("./handlers");
+const { clearAllTurnTimers } = require("./turnTimers");
 
 let wss = null;
 
@@ -87,6 +89,8 @@ function startServer(port = PORT) {
                     await handleRestartGame(ws);
                 } else if (event === "leave_room") {
                     await handleLeaveRoom(ws);
+                } else if (event === "send_chat") {
+                    handleChatMessage(ws, payload);
                 } else {
                     await handleGameAction(ws, event, payload);
                 }
@@ -112,6 +116,7 @@ function closeServer() {
     if (wss) wss.close();
     redisClient.quit();
     clearAllBotTimeouts();
+    clearAllTurnTimers();
 }
 
 module.exports = { startServer, closeServer };

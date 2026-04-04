@@ -64,7 +64,7 @@ export const TableArea: React.FC<TableAreaProps> = ({
                 <View style={styles.messageBox}>
                     <Text style={styles.messageText}>{gameMessage}</Text>
                     <Text style={styles.turnInfoText}>
-                        Sender: P{currentTurn.sender} | Receiver: P{currentTurn.receiver}
+                        Sender: P{currentTurn.sender + 1} | Receiver: P{currentTurn.receiver + 1}
                     </Text>
                 </View>
             </View>
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     },
     messageContainer: {
         position: 'absolute',
-        top: '25%',
+        top: '32%',
         alignSelf: 'center',
     },
     messageBox: {

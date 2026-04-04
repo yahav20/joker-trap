@@ -6,10 +6,11 @@
 const GameState = require("../game/GameState");
 const BotAdapter = require("../ai/BotAdapter");
 const logger = require("../utils/logger");
-const { PLAYER_COUNT } = require("../config/constant");
+const { PLAYER_COUNT, PHASES, TURN_TIMEOUT_MS } = require("../config/constant");
 const { acquireLock, releaseLock } = require("./locks");
 const { getRoomState, saveRoomState } = require("./roomStore");
 const { publishEvent } = require("./broadcast");
+const { setTurnTimer, clearTurnTimer, getDeadline } = require("./turnTimers");
 
 const AVATAR_KEYS = [
     'blackandwhite_joker', 'canday_joker', 'deadpool_joker', 'ghost_joker', 
@@ -65,16 +66,116 @@ function relayEventsToBots(outgoingEvents, botInstances) {
 }
 
 // -----------------------------------------------------------------------------
+// TURN TIMER HELPERS
+// -----------------------------------------------------------------------------
+
+/**
+ * Returns the player ID who must act next and the nature of that action,
+ * given the current turn phase and turn state.
+ *
+ * @returns {{ actorId: number, action: string } | null}
+ */
+function getNextActor(turnState) {
+    const { phase, senderId, receiverId } = turnState;
+    switch (phase) {
+        case PHASES.WAITING_FOR_REQUEST:
+        case PHASES.WAITING_FOR_FIRST_DECISION:
+        case PHASES.WAITING_FOR_SECOND_DECISION:
+            return { actorId: receiverId, role: 'receiver' };
+
+        case PHASES.WAITING_FOR_FIRST_OFFER:
+        case PHASES.WAITING_FOR_SECOND_OFFER:
+        case PHASES.WAITING_FOR_THIRD_OFFER:
+            return { actorId: senderId, role: 'sender' };
+
+        default:
+            return null;
+    }
+}
+
+/**
+ * Builds the fallback action payload for a player who has run out of time.
+ * - Sender phases   → offer a random card from the sender's hand
+ * - Receiver request → request a random valid rank
+ * - Receiver decision (1st) → accept the only card on the table
+ * - Receiver decision (2nd) → take the most recently placed card (accept_second)
+ *
+ * @param {object} turnState
+ * @param {Array} players  – game player objects with hand arrays
+ * @returns {{ event: string, playerId: number, payload: object }}
+ */
+function buildFallbackAction(turnState, players) {
+    const { phase, senderId, receiverId, tableCards } = turnState;
+    const RANKS = ['J', 'Q', 'K', 'A'];
+
+    switch (phase) {
+        case PHASES.WAITING_FOR_REQUEST: {
+            const rank = RANKS[Math.floor(Math.random() * RANKS.length)];
+            return { event: 'request_card', playerId: receiverId, payload: { rank } };
+        }
+
+        case PHASES.WAITING_FOR_FIRST_OFFER:
+        case PHASES.WAITING_FOR_SECOND_OFFER:
+        case PHASES.WAITING_FOR_THIRD_OFFER: {
+            const sender = players.find(p => p.id === senderId);
+            if (!sender || sender.hand.length === 0) return null;
+            const cardIndex = Math.floor(Math.random() * sender.hand.length);
+            return { event: 'offer_card', playerId: senderId, payload: { cardIndex } };
+        }
+
+        case PHASES.WAITING_FOR_FIRST_DECISION: {
+            // tableCards has 1 entry → accept it
+            return { event: 'make_decision', playerId: receiverId, payload: { decision: 'accept' } };
+        }
+
+        case PHASES.WAITING_FOR_SECOND_DECISION: {
+            // tableCards has 2 entries → take the most recent one (second)
+            return { event: 'make_decision', playerId: receiverId, payload: { decision: 'accept_second' } };
+        }
+
+        default:
+            return null;
+    }
+}
+
+/**
+ * Schedules the turn timer for the current phase.
+ * A bot-acted turn (isHumanAction=false) also sets a timer so that if a bot
+ * somehow stalls (e.g. an unhandled error in BotAdapter), the game doesn't freeze.
+ */
+function scheduleTurnTimer(roomId, turnState, players) {
+    const actor = getNextActor(turnState);
+    if (!actor) {
+        clearTurnTimer(roomId);
+        return;
+    }
+
+    setTurnTimer(roomId, () => {
+        // Callback fires outside any lock — we must re-enter via executeActionOnRoom
+        const fallback = buildFallbackAction(turnState, players);
+        if (!fallback) return;
+
+        logger.info(`Fallback action for room ${roomId}: player ${fallback.playerId} did not act in time (${turnState.phase}).`);
+        executeActionOnRoom(roomId, fallback.playerId, fallback.event, fallback.payload, false)
+            .catch(e => logger.error(`Fallback action error in room ${roomId}: ${e.message}`));
+    }, TURN_TIMEOUT_MS);
+}
+
+// -----------------------------------------------------------------------------
 // ACTION EXECUTION
 // -----------------------------------------------------------------------------
 
 /**
  * Executes ANY action against the room state atomically.
- * Works for both human WebSocket events and delayed bot actions.
+ * Works for both human WebSocket events and delayed bot/fallback actions.
  */
 async function executeActionOnRoom(roomId, playerId, actionEvent, payload, isHumanAction = true) {
     const locked = await acquireLock(roomId);
     if (!locked) return logger.warn(`Skipped action ${actionEvent} by ${playerId} (locked)`);
+
+    // Cancel the previous turn's timer before we mutate state.
+    // This prevents a stale callback from firing after the action completes.
+    clearTurnTimer(roomId);
 
     let outgoingEvents = [];
 
@@ -91,8 +192,8 @@ async function executeActionOnRoom(roomId, playerId, actionEvent, payload, isHum
         // Reconstruct GameState from JSON, injecting a buffering send
         const adapters = roomState.gameData.players.map(pData => ({
             id: pData.id,
-            send: (event, payload) => {
-                outgoingEvents.push({ targetPlayerId: pData.id, event, payload });
+            send: (event, eventPayload) => {
+                outgoingEvents.push({ targetPlayerId: pData.id, event, payload: eventPayload });
             }
         }));
 
@@ -126,13 +227,28 @@ async function executeActionOnRoom(roomId, playerId, actionEvent, payload, isHum
         roomState.botsConfig = botInstances.map(b => b.toJSON());
 
         // Only flag dirty for Redis sync at turn boundaries:
-        // turn advanced (sender/receiver changed) or game just ended
         const turnAdvanced = roomState.gameData.turnState.senderIndex !== prevSender
                           || roomState.gameData.turnState.receiverIndex !== prevReceiver;
         const gameJustEnded = !wasOver && roomState.gameData.over;
         const shouldPersist = isHumanAction && (turnAdvanced || gameJustEnded);
 
         await saveRoomState(roomId, roomState, shouldPersist);
+
+        // ── Schedule the next turn timer (unless the game just ended) ─────────
+        if (!roomState.gameData.over) {
+            scheduleTurnTimer(roomId, roomState.gameData.turnState, roomState.gameData.players);
+        }
+
+        // Inject the deadline into every game_update event so clients can display
+        // an accurate countdown even after a late reconnect.
+        const deadline = getDeadline(roomId);
+        if (deadline !== null) {
+            for (const out of outgoingEvents) {
+                if (out.event === 'game_update') {
+                    out.payload = { ...out.payload, deadline };
+                }
+            }
+        }
 
     } finally {
         await releaseLock(roomId);
@@ -183,6 +299,10 @@ async function checkRoomRestart(roomState) {
 
 async function startGame(roomState) {
     const roomId = roomState.id;
+
+    // Cancel any lingering turn timer from the previous round
+    clearTurnTimer(roomId);
+
     let outgoingEvents = [];
 
     // --- SEATING SHUFFLE ---
@@ -220,8 +340,8 @@ async function startGame(roomState) {
     for (let id = 0; id < PLAYER_COUNT; id++) {
         allAdapters.push({
             id,
-            send: (event, payload) => {
-                outgoingEvents.push({ targetPlayerId: id, event, payload });
+            send: (event, eventPayload) => {
+                outgoingEvents.push({ targetPlayerId: id, event, payload: eventPayload });
             }
         });
     }
@@ -253,11 +373,24 @@ async function startGame(roomState) {
     roomState.gameData = game.toJSON();
     roomState.botsConfig = botInstances.map(b => b.toJSON());
 
+    // Start the very first turn timer
+    scheduleTurnTimer(roomId, roomState.gameData.turnState, roomState.gameData.players);
+
+    // Inject deadline into the initial game_update broadcasts
+    const deadline = getDeadline(roomId);
+    if (deadline !== null) {
+        for (const out of outgoingEvents) {
+            if (out.event === 'game_update') {
+                out.payload = { ...out.payload, deadline };
+            }
+        }
+    }
+
     await saveRoomState(roomId, roomState, true);
 
     const players = [];
     roomState.clientsInfo.forEach(c => {
-        players.push({ id: c.playerId, avatar: c.avatar || 'blackandwhite_joker', name: c.playerName || 'Player ' + c.playerId, isBot: false });
+        players.push({ id: c.playerId, avatar: c.avatar || 'blackandwhite_joker', name: c.playerName || 'Player ' + (c.playerId + 1), isBot: false });
     });
     roomState.botsConfig.forEach(b => {
         players.push({ id: b.id, avatar: b.avatar || 'blackandwhite_joker', name: b.playerName || 'Bot', isBot: true });

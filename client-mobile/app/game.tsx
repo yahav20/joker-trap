@@ -4,8 +4,11 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 
 import { useGameSocket } from '../hooks/useGameSocket';
 import { useSoundEffects } from '../hooks/useSoundEffects';
+import { useMute } from '../hooks/useMute';
 import { BACKGROUND } from '../constants/Cards';
 import { styles as gameStyles } from '../styles/gameStyles';
+import * as NavigationBar from 'expo-navigation-bar';
+import { StatusBar } from 'expo-status-bar';
 
 // Components
 import { Card } from '../components/joker-trap/Card';
@@ -17,6 +20,10 @@ import { RequestModal } from '../components/joker-trap/RequestModal';
 import { Lobby } from '../components/joker-trap/Lobby';
 import { JokerLaughOverlay } from '../components/joker-trap/JokerLaughOverlay';
 import { LoadingOverlay } from '../components/joker-trap/LoadingOverlay';
+import { MuteButton } from '../components/joker-trap/MuteButton';
+import { ChatBubble } from '../components/joker-trap/ChatBubble';
+import { QuickChatMenu } from '../components/joker-trap/QuickChatMenu';
+import { TurnTimer } from '../components/joker-trap/TurnTimer';
 import { AVATARS } from '../constants/avatars';
 import { Image } from 'react-native';
 
@@ -39,6 +46,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
  *  - Renders the Lobby while waiting for players, or the full board once a game starts.
  *  - Always renders GameOverModal, RequestModal, and DisconnectedOverlay (each
  *    controls its own visibility internally).
+ *  - Renders MuteButton, ChatBubble overlays, QuickChatMenu, and TurnTimer.
  */
 export default function App() {
     const router = useRouter();
@@ -47,23 +55,35 @@ export default function App() {
     const {
         myHand, tableCards, gameMessage, toastMessage, gameOverPayload,
         currentTurn, opponents, myPlayerId, sendAction, connected, roomCode, reconnect, isReconnecting,
-        receivedJoker, playersData,
+        receivedJoker, playersData, turnDeadline, chatBubbles,
     } = useGameSocket(params.action, params.roomId, params.bots, params.avatar, params.playerName);
 
-    const { playFlip, playLaugh, playWin, playLose, playStart, playLeaveAlert } = useSoundEffects();
+    // ── Mute ─────────────────────────────────────────────────────────────────
+    const { isMuted, toggleMute } = useMute();
+    const { playFlip, playLaugh, playWin, playLose, playStart, playLeaveAlert, playTicking, stopTicking, playYourTurn } = useSoundEffects();
+
+    /** Enable full immersive screen mode for Android (hides nav bar and status bar) */
+    React.useEffect(() => {
+        try {
+            NavigationBar.setVisibilityAsync("hidden");
+            NavigationBar.setBehaviorAsync("overlay-swipe");
+        } catch (e) {
+            console.warn("Immersive mode setup failed", e);
+        }
+    }, []);
 
     const prevPhaseRef = React.useRef<string>('lobby');
     React.useEffect(() => {
         if (prevPhaseRef.current === 'lobby' && currentTurn.phase !== 'lobby' && !gameOverPayload) {
-            playStart();
+            playStart(isMuted);
         }
         prevPhaseRef.current = currentTurn.phase;
-    }, [currentTurn.phase, gameOverPayload, playStart]);
+    }, [currentTurn.phase, gameOverPayload, playStart, isMuted]);
 
     /** Fire the evil-laugh sound exactly once each time the Joker is received. */
     React.useEffect(() => {
         if (receivedJoker) {
-            playLaugh();
+            playLaugh(isMuted);
         }
     }, [receivedJoker]);
 
@@ -71,12 +91,26 @@ export default function App() {
     React.useEffect(() => {
         if (gameOverPayload && myPlayerId !== null) {
             if (gameOverPayload.loserId === myPlayerId) {
-                playLose();
+                playLose(isMuted);
             } else {
-                playWin();
+                playWin(isMuted);
             }
         }
     }, [gameOverPayload, myPlayerId]);
+
+    /** Derived specific booleans */
+    const isDecisionPhase = (currentTurn.phase === 'waiting_for_first_decision' || currentTurn.phase === 'waiting_for_second_decision') && currentTurn.receiver === myPlayerId;
+    const isRequestingPhase = currentTurn.phase === 'waiting_for_request' && currentTurn.receiver === myPlayerId;
+    const isOfferingPhase = (currentTurn.phase === 'waiting_for_first_offer' || currentTurn.phase === 'waiting_for_second_offer' || currentTurn.phase === 'waiting_for_third_offer') && currentTurn.sender === myPlayerId;
+    const isMyActionTurn = isDecisionPhase || isRequestingPhase || isOfferingPhase;
+
+    const prevRequestingRef = React.useRef<boolean>(false);
+    React.useEffect(() => {
+        if (isRequestingPhase && !prevRequestingRef.current) {
+            playYourTurn(isMuted);
+        }
+        prevRequestingRef.current = isRequestingPhase;
+    }, [isRequestingPhase, isMuted, playYourTurn]);
 
     /**
      * Map player seat IDs to the three opponent UI positions.
@@ -105,9 +139,8 @@ export default function App() {
     const rightName = playersData.find(p => p.id === rightOppId)?.name;
     const myName = playersData.find(p => p.id === myPlayerId)?.name || params.playerName || 'You';
 
-    const isMyTurn = (currentTurn.sender === myPlayerId || currentTurn.receiver === myPlayerId) && currentTurn.phase !== 'lobby';
     const showLoading = !connected && !isReconnecting;
-    const loadingMessage = "מתחבר לשרת...";
+    const loadingMessage = "Connecting to server...";
 
     // Build face-down hand arrays for each opponent zone.
     const leftHand = Array(leftObj ? leftObj.handCount : 4).fill(null);
@@ -131,7 +164,7 @@ export default function App() {
      */
     const handleCardOffer = (index: number) => {
         if (currentTurn?.phase?.includes('offer') && currentTurn.sender === myPlayerId) {
-            playFlip();
+            playFlip(isMuted);
             sendAction('offer_card', { cardIndex: index });
         }
     };
@@ -146,7 +179,7 @@ export default function App() {
         const isDeciding = (currentTurn.phase === 'waiting_for_first_decision' || currentTurn.phase === 'waiting_for_second_decision') && currentTurn.receiver === myPlayerId;
         if (!isDeciding) return;
 
-        playFlip();
+        playFlip(isMuted);
 
         if (currentTurn.phase === 'waiting_for_first_decision' && index === 0) {
             sendAction('make_decision', { decision: 'accept' });
@@ -168,7 +201,7 @@ export default function App() {
      * Confirms before leaving the game (via hardware back or UI back).
      */
     const handleLeaveGame = React.useCallback(() => {
-        playLeaveAlert();
+        playLeaveAlert(isMuted);
         Alert.alert(
             "התנתקות מהמשחק",
             "האם אתה בטוח שאתה רוצה להתנתק מהמשחק?",
@@ -186,7 +219,7 @@ export default function App() {
             { cancelable: true }
         );
         return true; // prevent default back
-    }, [sendAction, router, playLeaveAlert]);
+    }, [sendAction, router, playLeaveAlert, isMuted]);
 
     React.useEffect(() => {
         const backHandler = BackHandler.addEventListener(
@@ -201,27 +234,25 @@ export default function App() {
     if (currentTurn?.phase === 'lobby' && !gameOverPayload) {
         return (
             <ImageBackground source={BACKGROUND} style={localStyles.background}>
+                <StatusBar hidden={true} />
                 <Lobby connected={connected} gameMessage={gameMessage} roomCode={roomCode} players={playersData} />
+                <MuteButton isMuted={isMuted} onToggle={toggleMute} />
             </ImageBackground>
         );
     }
 
-    /**
-     * Derived booleans that drive conditional rendering.
-     * Both require the local player to be the receiver AND the phase to match
-     * so that the UI only changes for the correct player.
-     */
-    const isDecisionPhase = (currentTurn.phase === 'waiting_for_first_decision' || currentTurn.phase === 'waiting_for_second_decision') && currentTurn.receiver === myPlayerId;
-    const isRequestingPhase = currentTurn.phase === 'waiting_for_request' && currentTurn.receiver === myPlayerId;
-
     return (
         <ImageBackground source={BACKGROUND} style={localStyles.background}>
+            <StatusBar hidden={true} />
             <SafeAreaView style={gameStyles.container}>
 
                 {/* Back to Home button — top left */}
                 <TouchableOpacity style={localStyles.backButton} onPress={handleLeaveGame}>
                     <Text style={localStyles.backButtonText}>‹ Home</Text>
                 </TouchableOpacity>
+
+                {/* Mute toggle — top right */}
+                <MuteButton isMuted={isMuted} onToggle={toggleMute} />
 
                 {/* Toast Notification */}
                 {toastMessage && (
@@ -230,17 +261,26 @@ export default function App() {
                     </View>
                 )}
 
-                {/* Opponents */}
+                {/* ── Opponents ────────────────────────────────────────────── */}
                 <View style={gameStyles.topZone}>
-                    <PlayerZone playerId={topOppId} hand={topHand} avatar={topAvatar} playerName={topName} rotation="180deg" isActive={currentTurn.sender === topOppId} isReceiver={currentTurn.receiver === topOppId} />
+                    <View style={{ position: 'relative' }}>
+                        <ChatBubble messageId={topOppId !== null ? (chatBubbles[topOppId] ?? null) : null} />
+                        <PlayerZone playerId={topOppId} hand={topHand} avatar={topAvatar} playerName={topName} rotation="180deg" isActive={currentTurn.sender === topOppId} isReceiver={currentTurn.receiver === topOppId} />
+                    </View>
                 </View>
 
                 <View style={gameStyles.leftZone}>
-                    <PlayerZone playerId={leftOppId} hand={leftHand} avatar={leftAvatar} playerName={leftName} vertical isActive={currentTurn.sender === leftOppId} isReceiver={currentTurn.receiver === leftOppId} />
+                    <View style={{ position: 'relative' }}>
+                        <ChatBubble messageId={leftOppId !== null ? (chatBubbles[leftOppId] ?? null) : null} />
+                        <PlayerZone playerId={leftOppId} hand={leftHand} avatar={leftAvatar} playerName={leftName} vertical isActive={currentTurn.sender === leftOppId} isReceiver={currentTurn.receiver === leftOppId} />
+                    </View>
                 </View>
 
                 <View style={gameStyles.rightZone}>
-                    <PlayerZone playerId={rightOppId} hand={rightHand} avatar={rightAvatar} playerName={rightName} vertical isActive={currentTurn.sender === rightOppId} isReceiver={currentTurn.receiver === rightOppId} />
+                    <View style={{ position: 'relative' }}>
+                        <ChatBubble messageId={rightOppId !== null ? (chatBubbles[rightOppId] ?? null) : null} />
+                        <PlayerZone playerId={rightOppId} hand={rightHand} avatar={rightAvatar} playerName={rightName} vertical isActive={currentTurn.sender === rightOppId} isReceiver={currentTurn.receiver === rightOppId} />
+                    </View>
                 </View>
 
                 {/* Center Table Area */}
@@ -255,15 +295,22 @@ export default function App() {
                     myPlayerId={myPlayerId}
                 />
 
+                {/* Turn countdown bar — below the table area in the center */}
+                <View style={localStyles.timerRow}>
+                    <TurnTimer deadline={gameOverPayload ? null : turnDeadline} playTicking={playTicking} stopTicking={stopTicking} isMuted={isMuted} isMyTurn={isMyActionTurn} />
+                </View>
+
                 {/* Local Player — pinned to bottom */}
                 <View style={gameStyles.bottomZone}>
-                    {/* Label + highlight around cards */}
                     <View style={[
                         currentTurn.sender === myPlayerId ? { borderColor: '#4da6ff', borderWidth: 2, borderRadius: 10, backgroundColor: 'rgba(77,166,255,0.2)', padding: 5 }
                             : currentTurn.receiver === myPlayerId ? { borderColor: '#ff6b4a', borderWidth: 2, borderRadius: 10, backgroundColor: 'rgba(255,107,74,0.2)', padding: 5 }
                                 : { padding: 5 },
-                        { alignItems: 'center' }
+                        { alignItems: 'center', position: 'relative' }
                     ]}>
+                        {/* My chat bubble */}
+                        <ChatBubble messageId={myPlayerId !== null ? (chatBubbles[myPlayerId] ?? null) : null} />
+
                         <View style={localStyles.myInfoRow}>
                             {myAvatar && AVATARS[myAvatar] && (
                                 <Image source={AVATARS[myAvatar]} style={localStyles.myAvatarIcon} />
@@ -285,6 +332,9 @@ export default function App() {
                 </View>
 
             </SafeAreaView>
+
+            {/* Quick Chat button — bottom right (outside SafeAreaView so it floats above everything) */}
+            <QuickChatMenu onSend={(messageId) => sendAction('send_chat', { messageId })} />
 
             {/* Modals */}
             <GameOverModal
@@ -318,7 +368,7 @@ const localStyles = StyleSheet.create({
     },
     toastContainer: {
         position: 'absolute',
-        top: 40,
+        top: 80,
         alignSelf: 'center',
         backgroundColor: 'rgba(0,128,255,0.9)',
         paddingVertical: 10,
@@ -373,5 +423,9 @@ const localStyles = StyleSheet.create({
         color: '#fff',
         fontSize: 15,
         fontWeight: 'bold',
+    },
+    timerRow: {
+        alignItems: 'center',
+        marginVertical: 4,
     },
 });

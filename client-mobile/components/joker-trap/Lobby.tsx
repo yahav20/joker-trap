@@ -1,6 +1,7 @@
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { styles as gameStyles } from '../../styles/gameStyles';
+import { AVATARS } from '../../constants/avatars';
 
 /**
  * Props for the Lobby component.
@@ -49,8 +50,11 @@ export const Lobby: React.FC<LobbyProps> = ({ connected, gameMessage, roomCode, 
                             <View key={p.id} style={styles.playerItem}>
                                 <View style={styles.avatarWrapper}>
                                     <View style={styles.avatarCircle}>
-                                        <Text style={styles.avatarEmoji}>👤</Text>
-                                        {/* Since images might be complex to load in simple View, using a placeholder icon or emoji if icon map not available here, but we have AVATARS constant. Let's use it. */}
+                                        {p.avatar && AVATARS[p.avatar] ? (
+                                            <Image source={AVATARS[p.avatar]} style={styles.avatarImage} />
+                                        ) : (
+                                            <Text style={styles.avatarEmoji}>👤</Text>
+                                        )}
                                     </View>
                                 </View>
                                 <Text style={styles.playerName} numberOfLines={1}>
@@ -143,14 +147,14 @@ const styles = StyleSheet.create({
     playersList: {
         width: '100%',
         flexDirection: 'row',
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
         justifyContent: 'center',
-        gap: 15,
+        gap: 10,
         marginVertical: 20,
     },
     playerItem: {
         alignItems: 'center',
-        width: 80,
+        width: 70,
     },
     playerItemEmpty: {
         opacity: 0.4,
@@ -165,6 +169,12 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#fff',
         marginBottom: 5,
+        overflow: 'hidden',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
     avatarCircleEmpty: {
         width: 50,

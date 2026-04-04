@@ -70,7 +70,7 @@ class GameState {
         ts.requestedRank = normalised;
         ts.phase = PHASES.WAITING_FOR_FIRST_OFFER;
 
-        logger.game(`Player ${playerId} requested rank: ${normalised}`);
+        logger.game(`Player ${playerId + 1} requested rank: ${normalised}`);
 
         // Broadcast to everyone that the phase changed to WAITING_FOR_FIRST_OFFER
         this._broadcastGameState();
@@ -78,7 +78,7 @@ class GameState {
         // Only the SENDER sees what was requested
         this._sender().send("card_requested", {
             requestedRank: normalised,
-            message: `Player ${ts.receiverId} requested: ${normalised}. Pick a card to offer face-down.`,
+            message: `Player ${ts.receiverId + 1} requested: ${normalised}. Pick a card to offer face-down.`,
             yourHand: this._sender().hand,
         });
 
@@ -184,7 +184,7 @@ class GameState {
                 for (const p of this.players) {
                     if (p.id !== this._sender().id && p.id !== this._receiver().id) {
                         p.send("interaction_update", {
-                            message: `Player ${this._receiver().id} rejected the first offer.`,
+                            message: `Player ${this._receiver().id + 1} rejected the first offer.`,
                             accepted: false,
                             offerNum: 1
                         });
@@ -210,7 +210,7 @@ class GameState {
                 for (const p of this.players) {
                     if (p.id !== this._sender().id && p.id !== this._receiver().id) {
                         p.send("interaction_update", {
-                            message: `Player ${this._receiver().id} forced a third offer.`,
+                            message: `Player ${this._receiver().id + 1} forced a third offer.`,
                             accepted: false,
                             offerNum: 2
                         });
@@ -270,7 +270,7 @@ class GameState {
         for (const p of this.players) {
             if (p.id !== sender.id && p.id !== receiver.id) {
                 p.send("interaction_update", {
-                    message: `Interaction between Player ${sender.id} and Player ${receiver.id} is complete.`,
+                    message: `Interaction between Player ${sender.id + 1} and Player ${receiver.id + 1} is complete.`,
                     accepted: true,
                     offerNum: ts.tableCards.length + 1 // Not perfectly accurate, but acceptable. Actually, acceptedIndex+1 is exactly the successful offerNum! Wait, acceptedIndex is 0 or 1.
                 });

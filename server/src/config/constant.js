@@ -39,4 +39,17 @@ const AVATAR_KEYS = [
     'robot_joker', 'wizard_joker', 'wood_joker', 'zombie_joker'
 ];
 
-module.exports = { PLAYER_COUNT, RANKS, SUITS, PHASES, PORT, REDIS_URL, AVATAR_KEYS };
+/**
+ * How long (ms) a player has to act before the server auto-plays on their behalf.
+ * Stored here so it can be tuned in one place. Sent as `deadline` in game_update.
+ */
+const TURN_TIMEOUT_MS = 20000;
+
+/**
+ * Valid quick-chat message IDs.
+ * The client sends a numeric ID; the server validates it and re-broadcasts the ID.
+ * Each client resolves the ID to a locale-appropriate string.
+ */
+const QUICK_CHAT_COUNT = 13;
+
+module.exports = { PLAYER_COUNT, RANKS, SUITS, PHASES, PORT, REDIS_URL, AVATAR_KEYS, TURN_TIMEOUT_MS, QUICK_CHAT_COUNT };
