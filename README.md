@@ -39,10 +39,13 @@ Each round involves a **Sender** (5 cards) and a **Receiver** (4 cards):
 ## ✨ Features
 
 - **📱 Premium Mobile App**: Modern UI built with React Native and Expo Router.
-- **🤖 Advanced AI**: Bots fill empty slots, using game theory to pass the Joker strategically.
+- **🤖 Strategic AI**: Advanced bots with "memory" and deception patterns to pass the Joker effectively.
+- **🔊 Immersive Audio**: Dedicated sound effects for turn alerts, clock-ticking pressure, and card interactions.
+- **🕶️ Immersive Mode**: Full-screen Android/iOS experience with hidden status and navigation bars.
+- **👥 Enhanced Lobby**: Real-time player indexing (P1-P4) with bot placeholders and avatar syncing.
 - **🔄 Persistence**: Stateless server architecture using **Redis** for room and state recovery.
-- **🔌 Robust Networking**: Automatic bot handover if a player disconnects mid-game.
-- **🎨 Rich Aesthetics**: Vibrantly designed game table and smooth animations.
+- **🔌 Robust Networking**: Automatic bot handover if a player disconnects mid-game (30s grace period).
+- **🎨 Modern UX**: Adjustable UI elements (chat bubbles, message containers) for optimal visibility.
 
 ---
 
